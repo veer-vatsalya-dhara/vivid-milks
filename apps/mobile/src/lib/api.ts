@@ -4,12 +4,15 @@ import { Platform } from 'react-native';
 const API_PORT = 4000;
 
 /**
- * `EXPO_PUBLIC_API_URL` if set; otherwise the machine running the Expo dev server
- * (so a phone on the same Wi-Fi reaches the local API server).
+ * `EXPO_PUBLIC_API_URL` if set. Otherwise, a deployed web build uses its own origin
+ * (the API is served under /api on the same site), and in development the API server
+ * on the machine running Expo (so a phone on the same Wi-Fi reaches it).
  */
 function resolveApiUrl(): string {
   if (process.env.EXPO_PUBLIC_API_URL) return process.env.EXPO_PUBLIC_API_URL.replace(/\/$/, '');
-  if (Platform.OS === 'web' && typeof window !== 'undefined') return `http://${window.location.hostname}:${API_PORT}`;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return __DEV__ ? `http://${window.location.hostname}:${API_PORT}` : window.location.origin;
+  }
   const devHost = Constants.expoConfig?.hostUri?.split(':')[0];
   return `http://${devHost ?? 'localhost'}:${API_PORT}`;
 }

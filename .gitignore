@@ -76,3 +76,7 @@ apps/mobile/ios/
 
 # Local development database (PGlite)
 apps/server/.data/
+
+# Vercel
+.vercel/
+apps/mobile/dist/

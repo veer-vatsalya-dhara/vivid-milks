@@ -169,6 +169,15 @@ describe('locking and delivery', () => {
     expect(await lockDueDates(database.db, clock)).toEqual([]);
   });
 
+  it('locks due dates when requests arrive, for serverless hosting', async () => {
+    const lazy = await buildApp({ db: database.db, now: () => clock, devAuth: true, lockOnRequest: true });
+    clock = ist('2026-11-01', '22:05');
+    await lazy.inject({ method: 'GET', url: '/api/me', headers: { 'x-user-id': String(RAVI) } });
+    const { body } = await call<LockResult>(ADMIN, 'POST', '/api/admin/lock', { date: '2026-11-02' });
+    expect(body.alreadyLocked).toBe(true);
+    await lazy.close();
+  });
+
   it('resumes deliveries after a top-up', async () => {
     await call(ADMIN, 'POST', `/api/admin/customers/${RAHUL}/wallet`, { amountPaise: 10000, note: 'Cash' });
     const { body } = await lockNov2();

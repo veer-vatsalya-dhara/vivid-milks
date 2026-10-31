@@ -5,6 +5,7 @@ import Fastify, { type FastifyError } from 'fastify';
 import { devAuthenticate } from './auth';
 import type { Db } from './db/client';
 import { users } from './db/schema';
+import { lockDueDates } from './services/locking';
 import { adminRoutes } from './routes/admin';
 import { commonRoutes } from './routes/common';
 import { customerRoutes } from './routes/customer';
@@ -19,9 +20,16 @@ export interface AppContext {
 export interface AppOptions extends AppContext {
   devAuth: boolean;
   logger?: boolean;
+  /**
+   * Lock due orders before handling API requests (at most once a minute). For serverless
+   * hosting, where there is no long-running timer to do it at the cutoff.
+   */
+  lockOnRequest?: boolean;
 }
 
-export async function buildApp({ db, now, devAuth, logger = false }: AppOptions) {
+const LOCK_ON_REQUEST_INTERVAL_MS = 60_000;
+
+export async function buildApp({ db, now, devAuth, logger = false, lockOnRequest = false }: AppOptions) {
   const app = Fastify({ logger });
   await app.register(cors, { origin: true });
   app.decorateRequest('user', null);
@@ -49,7 +57,15 @@ export async function buildApp({ db, now, devAuth, logger = false }: AppOptions)
   );
 
   const context: AppContext = { db, now };
+  let lastLockCheck = 0;
   await app.register(async (api) => {
+    if (lockOnRequest) {
+      api.addHook('onRequest', async () => {
+        if (now().getTime() - lastLockCheck < LOCK_ON_REQUEST_INTERVAL_MS) return;
+        lastLockCheck = now().getTime();
+        for (const result of await lockDueDates(db, now())) app.log.info({ lock: result }, 'Locked orders');
+      });
+    }
     api.addHook('preHandler', devAuthenticate(db));
     await api.register(commonRoutes, context);
     await api.register(customerRoutes, { ...context, prefix: '/me' });

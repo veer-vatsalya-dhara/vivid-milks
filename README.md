@@ -62,6 +62,20 @@ npm run db:generate -w @vivid-milks/server
 
 Migrations in `apps/server/drizzle/` are applied automatically when the server starts.
 
+## Test deployment (Vercel)
+
+One Vercel project serves both the **web version of the app** (`/`) and the **API** (`/api/*`). `scripts/vercel-build.mjs` builds it with Vercel's [Build Output API](https://vercel.com/docs/build-output-api): it migrates the database, exports the Expo app for web, and bundles the server into a single function. On Vercel, orders are locked when requests arrive after the cutoff, since there is no always-running timer.
+
+Project environment variables:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | Postgres connection string (added automatically by the Neon integration) |
+| `DEV_AUTH` | `true` (development sign-in; anyone with the link can act as any user) |
+| `SEED_IF_EMPTY` | `true` to load sample data into an empty database |
+
+Deploy from this folder with `npx vercel deploy --prod`.
+
 ## Production notes
 
-Set `DATABASE_URL` to a PostgreSQL database and `NODE_ENV=production`. With `NODE_ENV=production`, development sign-in and sample data are off, so API routes stay disabled until real login is added. See `apps/server/.env.example`.
+Set `DATABASE_URL` to a PostgreSQL database and `NODE_ENV=production`. With `NODE_ENV=production`, development sign-in and sample data are off unless `DEV_AUTH` / `SEED_IF_EMPTY` are set, so API routes stay disabled until real login is added. See `apps/server/.env.example`.
