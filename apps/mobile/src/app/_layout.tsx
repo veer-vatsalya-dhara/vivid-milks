@@ -1,9 +1,17 @@
+import {
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  useFonts,
+} from '@expo-google-fonts/poppins';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useState } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { Loading } from '@/components/ui';
+import { Fonts } from '@/constants/theme';
 import { SessionProvider, useSession } from '@/lib/session';
 
 function RootNavigator() {
@@ -11,7 +19,12 @@ function RootNavigator() {
   if (!ready) return <Loading />;
 
   return (
-    <Stack screenOptions={{ headerBackButtonDisplayMode: 'minimal' }}>
+    <Stack
+      screenOptions={{
+        headerBackButtonDisplayMode: 'minimal',
+        headerTitleStyle: { fontFamily: Fonts.semiBold, fontSize: 17 },
+        headerShadowVisible: false,
+      }}>
       {/* Anchor: when a guard changes, navigation falls back here and redirects to the right start screen. */}
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Protected guard={!user}>
@@ -22,6 +35,7 @@ function RootNavigator() {
         <Stack.Screen name="(customer)" options={{ headerShown: false }} />
         <Stack.Screen name="day/[date]" options={{ title: 'Change order', presentation: 'modal' }} />
         <Stack.Screen name="pause" options={{ title: 'Pause deliveries', presentation: 'modal' }} />
+        <Stack.Screen name="subscribe/[productId]" options={{ title: 'Subscription', presentation: 'modal' }} />
       </Stack.Protected>
 
       <Stack.Protected guard={mode === 'delivery'}>
@@ -46,6 +60,9 @@ function RootNavigator() {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1 } } }));
+  const [fontsLoaded, fontError] = useFonts({ Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold });
+  // Fall back to system fonts rather than blocking the app if loading fails.
+  if (!fontsLoaded && !fontError) return <Loading />;
 
   return (
     <QueryClientProvider client={queryClient}>

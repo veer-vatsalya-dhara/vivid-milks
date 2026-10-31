@@ -18,6 +18,11 @@ const ICONS = {
   check: { ios: 'checkmark.circle.fill', android: 'check_circle', web: 'check_circle' },
   cross: { ios: 'xmark.circle.fill', android: 'cancel', web: 'cancel' },
   pause: { ios: 'pause.circle', android: 'pause_circle', web: 'pause_circle' },
+  basket: { ios: 'basket.fill', android: 'shopping_basket', web: 'shopping_basket' },
+  shop: { ios: 'storefront', android: 'storefront', web: 'storefront' },
+  location: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
+  clock: { ios: 'clock', android: 'schedule', web: 'schedule' },
+  moon: { ios: 'moon.stars', android: 'bedtime', web: 'bedtime' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

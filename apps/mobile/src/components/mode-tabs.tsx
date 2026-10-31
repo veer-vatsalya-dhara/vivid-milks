@@ -1,7 +1,9 @@
 import { router } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
-import { Pressable } from 'react-native';
+import type { ReactNode } from 'react';
+import { Platform, Pressable, View } from 'react-native';
 
+import { Fonts } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 import { Icon, type IconName } from './icon';
@@ -10,31 +12,44 @@ export interface TabSpec {
   name: string;
   title: string;
   icon: IconName;
+  /** Hide the navigation header (for screens that draw their own). */
+  headerShown?: boolean;
 }
 
-function AccountButton() {
+export function AccountButton({ color }: { color?: string }) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel="Account"
       hitSlop={12}
-      onPress={() => router.push('/account')}
-      style={{ paddingHorizontal: 16 }}>
-      <Icon name="account" color={theme.primary} size={26} />
+      onPress={() => router.push('/account')}>
+      <Icon name="account" color={color ?? theme.text} size={26} />
     </Pressable>
   );
 }
 
-/** Bottom tabs for one mode, each screen with an account button in its header. */
-export function ModeTabs({ tabs }: { tabs: TabSpec[] }) {
+/** Bottom tabs for one mode. Each header ends with `headerExtra` (if any) and the account button. */
+export function ModeTabs({ tabs, headerExtra }: { tabs: TabSpec[]; headerExtra?: () => ReactNode }) {
   const theme = useTheme();
   return (
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
-        headerRight: () => <AccountButton />,
+        tabBarLabelStyle: { fontFamily: Fonts.medium, fontSize: 11, lineHeight: 16 },
+        // Mobile browsers report no bottom safe area, so the default web tab bar clips Poppins labels.
+        tabBarStyle: [{ borderTopColor: theme.border }, Platform.OS === 'web' && { height: 64, paddingBottom: 10 }],
+        headerTitleAlign: 'left',
+        headerTitleStyle: { fontFamily: Fonts.bold, fontSize: 19 },
+        headerShadowVisible: false,
+        headerStyle: { backgroundColor: theme.backgroundElement },
+        headerRight: () => (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 16 }}>
+            {headerExtra?.()}
+            <AccountButton />
+          </View>
+        ),
       }}>
       {tabs.map((tab) => (
         <Tabs.Screen
@@ -42,6 +57,7 @@ export function ModeTabs({ tabs }: { tabs: TabSpec[] }) {
           name={tab.name}
           options={{
             title: tab.title,
+            headerShown: tab.headerShown ?? true,
             tabBarIcon: ({ color }) => <Icon name={tab.icon} color={color} />,
           }}
         />

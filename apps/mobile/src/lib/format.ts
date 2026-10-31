@@ -1,4 +1,4 @@
-import { addDays, todayInIst, type DayStatus, type IsoDate } from '@vivid-milks/shared';
+import { addDays, formatTimeOfDay, todayInIst, type DayStatus, type IsoDate } from '@vivid-milks/shared';
 
 export { formatRupees, formatTimeOfDay } from '@vivid-milks/shared';
 
@@ -35,3 +35,10 @@ export const REASON_LABELS = {
 } as const;
 
 export const ROLE_LABELS = { customer: 'Customer', delivery: 'Delivery', admin: 'Admin' } as const;
+
+/** When changes to `date` close: "10:00 PM tonight" or "10:00 PM on Sun, 1 Nov". */
+export function cutoffText(date: IsoDate, orderCutoffTime: string, now = new Date()): string {
+  const cutoff = formatTimeOfDay(orderCutoffTime);
+  const dayBefore = addDays(date, -1);
+  return dayBefore === todayInIst(now) ? `${cutoff} tonight` : `${cutoff} on ${formatDay(dayBefore)}`;
+}

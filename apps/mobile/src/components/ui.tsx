@@ -12,8 +12,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 
-import { MaxContentWidth, Radius, Spacing, type ThemeColor } from '@/constants/theme';
+import { Fonts, MaxContentWidth, Radius, Spacing, type ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { formatRupees } from '@/lib/format';
 
 import { ThemedText } from './themed-text';
 
@@ -152,21 +153,44 @@ export function Button({
   );
 }
 
-/** − qty + control. */
+/**
+ * − qty + control with outlined square buttons. With `addLabel`, a quantity of 0
+ * shows a single ADD button instead.
+ */
 export function Stepper({
   value,
   onChange,
   min = 0,
   max = 20,
   disabled = false,
+  addLabel,
 }: {
   value: number;
   onChange: (value: number) => void;
   min?: number;
   max?: number;
   disabled?: boolean;
+  addLabel?: string;
 }) {
   const theme = useTheme();
+  if (addLabel && value === 0) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        disabled={disabled}
+        onPress={() => onChange(1)}
+        style={({ pressed }) => [
+          styles.addButton,
+          { borderColor: theme.primary, backgroundColor: theme.backgroundElement },
+          pressed && styles.pressed,
+          disabled && styles.disabled,
+        ]}>
+        <ThemedText type="smallBold" style={{ color: theme.primary }}>
+          {addLabel}
+        </ThemedText>
+      </Pressable>
+    );
+  }
   const step = (delta: number, label: string) => {
     const next = value + delta;
     const blocked = disabled || next < min || next > max;
@@ -176,14 +200,14 @@ export function Stepper({
         accessibilityLabel={label}
         disabled={blocked}
         onPress={() => onChange(next)}
-        hitSlop={8}
+        hitSlop={6}
         style={({ pressed }) => [
           styles.stepButton,
-          { backgroundColor: theme.backgroundSelected },
+          { borderColor: theme.primary, backgroundColor: theme.backgroundElement },
           pressed && styles.pressed,
           blocked && styles.disabled,
         ]}>
-        <ThemedText type="subtitle" style={{ color: theme.primary }}>
+        <ThemedText type="subtitle" style={{ color: theme.primary, lineHeight: 22 }}>
           {delta > 0 ? '+' : '−'}
         </ThemedText>
       </Pressable>
@@ -197,6 +221,59 @@ export function Stepper({
       </ThemedText>
       {step(1, 'Increase')}
     </Row>
+  );
+}
+
+/** Green pill with the wallet balance, as in the top corner of the basket. */
+export function WalletPill({ paise, onPress }: { paise: number; onPress?: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Wallet balance ${formatRupees(paise)}`}
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.walletPill,
+        { backgroundColor: paise < 0 ? theme.danger : theme.success },
+        pressed && styles.pressed,
+      ]}>
+      <ThemedText type="smallBold" style={{ color: theme.onPrimary }}>
+        {formatRupees(paise)}
+      </ThemedText>
+    </Pressable>
+  );
+}
+
+/** Underlined text tabs, e.g. "Tomorrow's Order | Rest of the Month". */
+export function TabBar<T extends string>({
+  tabs,
+  value,
+  onChange,
+}: {
+  tabs: { key: T; label: string }[];
+  value: T;
+  onChange: (key: T) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.tabBar, { borderBottomColor: theme.border }]}>
+      {tabs.map((tab) => {
+        const selected = tab.key === value;
+        return (
+          <Pressable
+            key={tab.key}
+            accessibilityRole="tab"
+            accessibilityState={{ selected }}
+            onPress={() => onChange(tab.key)}
+            style={[styles.tab, selected && { borderBottomColor: theme.primary }]}>
+            <ThemedText type="smallBold" themeColor={selected ? 'primary' : 'textSecondary'}>
+              {tab.label}
+            </ThemedText>
+          </Pressable>
+        );
+      })}
+    </View>
   );
 }
 
@@ -320,6 +397,7 @@ export const styles = StyleSheet.create({
     alignSelf: 'center',
   },
   card: { borderRadius: Radius.large, borderWidth: 1, padding: Spacing.three, gap: Spacing.two },
+  pill: { paddingHorizontal: Spacing.two, paddingVertical: 3, borderRadius: Radius.pill, alignSelf: 'flex-start' },
   row: { flexDirection: 'row', alignItems: 'center' },
   flex: { flex: 1 },
   wrap: { flexWrap: 'wrap' },
@@ -332,8 +410,27 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonSmall: { minHeight: 36, paddingHorizontal: Spacing.three },
-  stepButton: { width: 40, height: 40, borderRadius: Radius.pill, alignItems: 'center', justifyContent: 'center' },
-  stepValue: { minWidth: 28, textAlign: 'center' },
+  stepButton: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.small,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addButton: {
+    minWidth: 104,
+    height: 34,
+    borderRadius: Radius.small,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: Spacing.three,
+  },
+  walletPill: { paddingHorizontal: Spacing.three, paddingVertical: 6, borderRadius: Radius.pill },
+  tabBar: { flexDirection: 'row', borderBottomWidth: 1, gap: Spacing.four },
+  tab: { paddingVertical: Spacing.two, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
+  stepValue: { minWidth: 24, textAlign: 'center' },
   chip: {
     paddingHorizontal: Spacing.three,
     paddingVertical: Spacing.two,
@@ -342,7 +439,14 @@ export const styles = StyleSheet.create({
   },
   badge: { paddingHorizontal: Spacing.two, paddingVertical: Spacing.half, borderRadius: Radius.small, alignSelf: 'flex-start' },
   field: { gap: Spacing.one },
-  input: { borderWidth: 1, borderRadius: Radius.medium, paddingHorizontal: Spacing.three, minHeight: 48, fontSize: 16 },
+  input: {
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+    minHeight: 48,
+    fontSize: 15,
+    fontFamily: Fonts.regular,
+  },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.three },
   centerText: { textAlign: 'center' },
   divider: { height: StyleSheet.hairlineWidth },

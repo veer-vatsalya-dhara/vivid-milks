@@ -1,13 +1,15 @@
 import type { Day, Product } from '@vivid-milks/shared';
+import { View } from 'react-native';
 
 import { api } from '@/lib/api';
 import { formatRupees } from '@/lib/format';
 import { useApiMutation } from '@/lib/queries';
 
+import { ProductRow } from './product-row';
 import { Divider, Row, Stepper, Text } from './ui';
 
 /**
- * Products for one day with − / + controls. Shows the day's items, plus every other
+ * Products for one day with quantity controls. Shows the day's items, plus every other
  * active product when `showAllProducts` is set (so customers can add extras).
  */
 export function DayItems({
@@ -38,38 +40,37 @@ export function DayItems({
 
   return (
     <>
-      {rows.map((item) => {
+      {rows.map((item, i) => {
         const product = byId.get(item.productId);
+        if (!product) return null;
         return (
-          <Row key={item.productId} style={{ paddingVertical: 4 }}>
-            <Row style={{ flex: 1 }}>
-              <Text style={{ flex: 1 }}>
-                <Text type="smallBold">{product?.name ?? 'Product'}</Text>
-                <Text type="small" themeColor="textSecondary">
-                  {'  '}
-                  {product?.unitLabel} · {product && formatRupees(product.pricePaise)}
-                  {item.changed ? '  · changed' : ''}
-                </Text>
-              </Text>
-            </Row>
-            {day.editable ? (
-              <Stepper
-                value={item.qty}
-                disabled={setQty.isPending}
-                onChange={(qty) => setQty.mutate({ productId: item.productId, qty })}
-              />
-            ) : (
-              <Text type="subtitle">× {item.qty}</Text>
-            )}
-          </Row>
+          <View key={item.productId}>
+            {i > 0 && <Divider />}
+            <ProductRow
+              product={product}
+              note={item.changed ? 'changed for this day' : undefined}
+              control={
+                day.editable ? (
+                  <Stepper
+                    value={item.qty}
+                    addLabel={day.items.some((d) => d.productId === item.productId) ? undefined : 'ADD'}
+                    disabled={setQty.isPending}
+                    onChange={(qty) => setQty.mutate({ productId: item.productId, qty })}
+                  />
+                ) : (
+                  <Text type="subtitle">× {item.qty}</Text>
+                )
+              }
+            />
+          </View>
         );
       })}
       <Divider />
-      <Row>
+      <Row style={{ paddingTop: 8 }}>
         <Text type="smallBold" style={{ flex: 1 }}>
           Total
         </Text>
-        <Text type="smallBold">{formatRupees(day.totalPaise)}</Text>
+        <Text type="price">{formatRupees(day.totalPaise)}</Text>
       </Row>
     </>
   );
