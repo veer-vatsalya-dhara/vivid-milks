@@ -44,7 +44,12 @@ await build({
 writeFileSync(join(funcDir, 'index.js'), "module.exports = require('./server.js').default;\n");
 writeFileSync(
   join(funcDir, '.vc-config.json'),
-  JSON.stringify({ runtime: 'nodejs22.x', handler: 'index.js', launcherType: 'Nodejs', maxDuration: 30 }, null, 2),
+  JSON.stringify(
+    // Singapore, next to the database (the closest Neon region to India).
+    { runtime: 'nodejs22.x', handler: 'index.js', launcherType: 'Nodejs', maxDuration: 30, regions: ['sin1'] },
+    null,
+    2,
+  ),
 );
 
 console.log('→ Writing static files and routes');
