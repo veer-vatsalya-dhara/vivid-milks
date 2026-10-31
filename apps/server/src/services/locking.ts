@@ -3,7 +3,7 @@ import { inArray } from 'drizzle-orm';
 
 import type { Db } from '../db/client';
 import { addresses, dayLocks, deliveries, deliveryItems } from '../db/schema';
-import { customersWithOrders, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
+import { customersWithOrders, loadLockedDates, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
 import { planDay } from './planner';
 import { getSettings } from './settings';
 
@@ -64,10 +64,12 @@ export async function lockDate(db: Db, date: IsoDate, now: Date): Promise<LockRe
 
 /** Locks today (if it was missed) and tomorrow once its cutoff has passed. Safe to call repeatedly. */
 export async function lockDueDates(db: Db, now: Date): Promise<LockResult[]> {
-  const { orderCutoffTime } = await getSettings(db);
   const today = todayInIst(now);
+  const tomorrow = addDays(today, 1);
+  const [{ orderCutoffTime }, locked] = await Promise.all([getSettings(db), loadLockedDates(db, today, tomorrow)]);
   const results: LockResult[] = [];
-  for (const date of [today, addDays(today, 1)]) {
+  for (const date of [today, tomorrow]) {
+    if (locked.has(date)) continue;
     if (date === today || isPastCutoff(date, orderCutoffTime, now)) {
       const result = await lockDate(db, date, now);
       if (!result.alreadyLocked) results.push(result);
