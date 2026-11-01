@@ -1,5 +1,5 @@
 import { buildApp } from './app';
-import { config } from './config';
+import { authOptions, config } from './config';
 import { openDatabase } from './db/client';
 import { seedIfEmpty } from './db/seed';
 import { lockDueDates } from './services/locking';
@@ -7,7 +7,12 @@ import { lockDueDates } from './services/locking';
 const LOCK_CHECK_INTERVAL_MS = 60_000;
 
 const { db, close } = await openDatabase(config);
-const app = await buildApp({ db, now: () => new Date(), devAuth: config.devAuth, logger: true });
+const app = await buildApp({
+  db,
+  now: () => new Date(),
+  ...authOptions(),
+  logger: true,
+});
 
 if (config.seedIfEmpty && (await seedIfEmpty(db))) app.log.info('Seeded sample data');
 

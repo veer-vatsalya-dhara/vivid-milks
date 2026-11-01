@@ -183,6 +183,8 @@ export interface AdminDashboard {
 export interface CustomerSummary {
   id: number;
   name: string;
+  /** Admins appear too, since they can order for themselves. */
+  role: Role;
   phone: string | null;
   area: string | null;
   routeName: string | null;
@@ -204,6 +206,18 @@ export interface Route {
   deliveryUserId: number | null;
   deliveryUserName: string | null;
   customerCount: number;
+}
+
+export interface AuthConfig {
+  /** Google OAuth web client ID, or null when Google sign-in isn't set up. */
+  googleWebClientId: string | null;
+  /** Whether the development user picker is available. */
+  devSignIn: boolean;
+}
+
+export interface SignInResult {
+  token: string;
+  user: User;
 }
 
 export interface LockResult {
@@ -272,13 +286,22 @@ export const walletCreditInput = z.object({
 });
 export type WalletCreditInput = z.infer<typeof walletCreditInput>;
 
-export const createUserInput = z.object({
+const email = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .pipe(z.email('Enter a valid email'));
+
+/** Adding or editing a person. Their Google account email lets them sign in. */
+export const userInput = z.object({
   name: trimmed(100).min(1, 'Required'),
   phone: phone.nullable().default(null),
-  email: z.email().nullable().default(null),
+  email: email.nullable().default(null),
   role: z.enum(ROLES),
 });
-export type CreateUserInput = z.input<typeof createUserInput>;
+export type UserInput = z.input<typeof userInput>;
+
+export const googleSignInInput = z.object({ idToken: z.string().min(1) });
 
 export const roleInput = z.object({ role: z.enum(ROLES) });
 

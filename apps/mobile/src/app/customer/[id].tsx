@@ -1,5 +1,5 @@
 import type { CustomerDetail } from '@vivid-milks/shared';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking } from 'react-native';
 
@@ -33,7 +33,17 @@ export default function CustomerScreen() {
 function Details({ customer: { user, address } }: { customer: CustomerDetail }) {
   return (
     <Card>
-      <Text type="subtitle">{user.name}</Text>
+      <Row>
+        <Text type="subtitle" style={{ flex: 1 }}>
+          {user.name}
+        </Text>
+        <Button title="Edit or remove" small variant="secondary" onPress={() => router.push(`/person/${user.id}`)} />
+      </Row>
+      {user.email && (
+        <Text type="small" themeColor="textSecondary">
+          {user.email}
+        </Text>
+      )}
       {user.phone && (
         <Row>
           <Text style={{ flex: 1 }}>{user.phone}</Text>

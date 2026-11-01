@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { buildApp } from './app';
-import { config } from './config';
+import { authOptions, config } from './config';
 import { openDatabase } from './db/client';
 
 /**
@@ -10,7 +10,12 @@ import { openDatabase } from './db/client';
  */
 async function createApp() {
   const { db } = await openDatabase({ ...config, migrate: false });
-  const app = await buildApp({ db, now: () => new Date(), devAuth: config.devAuth, logger: true, lockOnRequest: true });
+  const app = await buildApp({
+    db,
+    now: () => new Date(),
+    ...authOptions(),
+    logger: true, lockOnRequest: true,
+  });
   await app.ready();
   return app;
 }

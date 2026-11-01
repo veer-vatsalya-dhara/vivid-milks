@@ -12,7 +12,7 @@ A daily milk subscription and delivery app, in the style of Milkbasket. Customer
 | Products | Milk variants only (e.g. Cow 500 ml, Buffalo 1 L), managed by admin |
 | Order cutoff | Admin setting. Placeholder default: 10:00 PM the night before |
 | Low balance | No delivery if the wallet can't cover the day's order |
-| Login | **Deferred.** Building without login first, using a development-only user picker. Planned: WhatsApp OTP (Meta Cloud API setup in progress) and/or Google sign-in. Customers add a mobile number during onboarding so delivery staff can call them |
+| Login | **Google sign-in** (web app now; phone apps with their store builds) until WhatsApp OTP is ready (Meta Cloud API setup in progress). Anyone can sign up as a customer; admins add delivery staff and admins by Google email. Customers add a mobile number during onboarding so delivery staff can call them |
 | Delivery time | By 7:00 AM |
 | Region | India: INR, `Asia/Kolkata` time zone |
 

@@ -8,11 +8,19 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { useState } from 'react';
-import { useColorScheme } from 'react-native';
+import { Platform, useColorScheme } from 'react-native';
 
 import { Loading } from '@/components/ui';
 import { Fonts } from '@/constants/theme';
 import { SessionProvider, useSession } from '@/lib/session';
+
+// Mobile browsers size `height: 100%` to the viewport with the address bar showing, leaving a
+// gap under the tab bar once it hides. Follow the dynamic viewport height instead.
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.textContent = 'html, body, #root { height: 100dvh; }';
+  document.head.appendChild(style);
+}
 
 function RootNavigator() {
   const { ready, user, mode } = useSession();
@@ -47,7 +55,7 @@ function RootNavigator() {
         <Stack.Screen name="customer/[id]" options={{ title: 'Customer' }} />
         <Stack.Screen name="route/[id]" options={{ title: 'Route', presentation: 'modal' }} />
         <Stack.Screen name="product/[id]" options={{ title: 'Product', presentation: 'modal' }} />
-        <Stack.Screen name="users" options={{ title: 'Users & roles' }} />
+        <Stack.Screen name="person/[id]" options={{ title: 'Person', presentation: 'modal' }} />
       </Stack.Protected>
 
       <Stack.Protected guard={!!user}>

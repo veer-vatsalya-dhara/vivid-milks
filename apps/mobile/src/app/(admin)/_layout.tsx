@@ -5,7 +5,7 @@ export default function AdminLayout() {
     <ModeTabs
       tabs={[
         { name: 'dashboard', title: 'Dashboard', icon: 'dashboard' },
-        { name: 'customers', title: 'Customers', icon: 'people' },
+        { name: 'people', title: 'People', icon: 'people' },
         { name: 'routes', title: 'Routes', icon: 'route' },
         { name: 'catalog', title: 'Products', icon: 'milk' },
         { name: 'settings', title: 'Settings', icon: 'settings' },

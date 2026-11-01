@@ -1,10 +1,11 @@
 import { productInput, type Product } from '@vivid-milks/shared';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, Chip, Field, QueryView, Row, Screen, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useAllProducts, useApiMutation } from '@/lib/queries';
+import { closeScreen } from '@/lib/navigation';
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -33,7 +34,7 @@ function ProductForm({ product }: { product: Product | null }) {
   const save = useApiMutation(
     (body: unknown) =>
       api(product ? `/admin/products/${product.id}` : '/admin/products', { method: product ? 'PUT' : 'POST', body }),
-    { onSuccess: () => router.back() },
+    { onSuccess: () => closeScreen() },
   );
   const parsed = productInput.safeParse({ name, unitLabel, pricePaise: Math.round(Number(price) * 100), active });
 

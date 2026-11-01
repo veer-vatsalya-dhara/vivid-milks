@@ -29,9 +29,12 @@ npm run mobile
 
 Open the app with Expo Go on a phone on the same Wi-Fi (scan the QR code), or press `a` for an Android emulator or `i` for the iOS simulator. The app finds the API server on the same machine as the Expo dev server; set `EXPO_PUBLIC_API_URL` to point it elsewhere.
 
-### Signing in during development
+### Signing in
 
-Real login (WhatsApp OTP / Google) is not built yet. The app shows a **development sign-in** screen listing every user; pick one to act as them. Sample data includes an admin, a delivery person (Ravi), three customers, four milk products and a "Green Park" route. Admins can switch between Admin, Customer and Delivery modes from the Account screen.
+- **Google sign-in** (web app): set `GOOGLE_CLIENT_IDS` and `SESSION_SECRET` on the server. Anyone can sign in and becomes a customer; delivery staff and admins are added by an admin under **People** using their Google email. Emails in `ADMIN_EMAILS` become admins on sign-in. Google sign-in in the phone apps needs a full app build (not Expo Go) and comes with the store builds. WhatsApp OTP is planned.
+- **Development sign-in** (`DEV_AUTH=true`, on by default locally): the sign-in screen also lists every user; pick one to act as them. Sample data includes an admin, a delivery person (Ravi), three customers, four milk products and a "Green Park" route.
+
+Admins can switch between Admin, Customer and Delivery modes from the Account screen, and add, edit or remove people under **People**. Removing someone stops their sign-in, subscriptions and upcoming deliveries but keeps their history.
 
 To start over with fresh sample data, stop the server and delete `apps/server/.data/`.
 
@@ -71,7 +74,10 @@ Project environment variables:
 | Variable | Value |
 |---|---|
 | `DATABASE_URL` | Postgres connection string (added automatically by the Neon integration) |
-| `DEV_AUTH` | `true` (development sign-in; anyone with the link can act as any user) |
+| `GOOGLE_CLIENT_IDS` | Google OAuth web client ID (comma-separated if several) |
+| `ADMIN_EMAILS` | Google emails that become admins on sign-in |
+| `SESSION_SECRET` | Long random string that signs session tokens |
+| `DEV_AUTH` | `true` to also show the test user picker (anyone with the link can act as any user); `false` once Google sign-in is set up |
 | `SEED_IF_EMPTY` | `true` to load sample data into an empty database |
 
 Deploy from this folder with `npx vercel deploy --prod`.

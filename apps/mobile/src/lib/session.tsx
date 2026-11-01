@@ -2,7 +2,7 @@ import type { Me, Role } from '@vivid-milks/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { api, ApiError, setApiUser } from './api';
+import { api, ApiError, setApiAuth, type ApiAuth } from './api';
 import { storage } from './storage';
 
 export interface SessionUser {
@@ -19,13 +19,18 @@ interface SessionState {
   user: SessionUser | null;
   mode: Mode | null;
   modes: Mode[];
-  signIn: (user: SessionUser) => Promise<void>;
+  signIn: (user: SessionUser, auth: NonNullable<ApiAuth>) => Promise<void>;
   signOut: () => Promise<void>;
   setMode: (mode: Mode) => Promise<void>;
 }
 
-const USER_KEY = 'session.user';
-const MODE_KEY = 'session.mode';
+const SESSION_KEY = 'session';
+
+interface StoredSession {
+  user: SessionUser;
+  auth: NonNullable<ApiAuth>;
+  mode: Mode;
+}
 
 const SessionContext = createContext<SessionState | null>(null);
 
@@ -36,22 +41,15 @@ export function modesFor(role: Role): Mode[] {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const [ready, setReady] = useState(false);
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [mode, setModeState] = useState<Mode | null>(null);
+  const [session, setSession] = useState<StoredSession | null>(null);
 
   const apply = useCallback(
-    async (next: SessionUser | null, nextMode: Mode | null) => {
-      setApiUser(next?.id ?? null);
+    async (next: StoredSession | null) => {
+      setApiAuth(next?.auth ?? null);
       queryClient.clear();
-      setUser(next);
-      setModeState(nextMode);
-      if (next && nextMode) {
-        await storage.set(USER_KEY, JSON.stringify(next));
-        await storage.set(MODE_KEY, nextMode);
-      } else {
-        await storage.remove(USER_KEY);
-        await storage.remove(MODE_KEY);
-      }
+      setSession(next);
+      if (next) await storage.set(SESSION_KEY, JSON.stringify(next));
+      else await storage.remove(SESSION_KEY);
     },
     [queryClient],
   );
@@ -59,20 +57,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const saved = await storage.get(USER_KEY);
+        const saved = await storage.get(SESSION_KEY);
         if (!saved) return;
-        const savedUser = JSON.parse(saved) as SessionUser;
-        const savedMode = (await storage.get(MODE_KEY)) as Mode | null;
-        setApiUser(savedUser.id);
-        // Pick up role changes made by an admin since last time.
+        const stored = JSON.parse(saved) as StoredSession;
+        setApiAuth(stored.auth);
+        // Pick up role changes (or removal) since last time; keep the saved session if offline.
         const me = await api<Me>('/me').catch((e: unknown) => {
           if (e instanceof ApiError && e.status === 401) return null;
-          return { ...savedUser } as Pick<Me, 'id' | 'name' | 'role'>;
+          return stored.user;
         });
-        if (!me) return apply(null, null);
-        const fresh = { id: me.id, name: me.name, role: me.role };
-        const modes = modesFor(fresh.role);
-        await apply(fresh, savedMode && modes.includes(savedMode) ? savedMode : modes[0]!);
+        if (!me) return apply(null);
+        const user = { id: me.id, name: me.name, role: me.role };
+        const modes = modesFor(user.role);
+        await apply({ ...stored, user, mode: modes.includes(stored.mode) ? stored.mode : modes[0]! });
+      } catch {
+        await apply(null);
       } finally {
         setReady(true);
       }
@@ -82,14 +81,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const value = useMemo<SessionState>(
     () => ({
       ready,
-      user,
-      mode,
-      modes: user ? modesFor(user.role) : [],
-      signIn: (next) => apply(next, modesFor(next.role)[0]!),
-      signOut: () => apply(null, null),
-      setMode: (next) => apply(user, next),
+      user: session?.user ?? null,
+      mode: session?.mode ?? null,
+      modes: session ? modesFor(session.user.role) : [],
+      signIn: (user, auth) => apply({ user, auth, mode: modesFor(user.role)[0]! }),
+      signOut: () => apply(null),
+      setMode: async (mode) => {
+        if (session) await apply({ ...session, mode });
+      },
     }),
-    [ready, user, mode, apply],
+    [ready, session, apply],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

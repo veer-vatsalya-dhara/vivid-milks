@@ -1,12 +1,12 @@
 import {
   assignRouteInput,
-  createUserInput,
   lockInput,
   productInput,
   roleInput,
   routeInput,
   settingsInput,
   subscriptionInput,
+  userInput,
   walletCreditInput,
 } from '@vivid-milks/shared';
 import type { FastifyInstance } from 'fastify';
@@ -26,9 +26,11 @@ import {
   listCustomers,
   listRoutes,
   listUsers,
+  removeUser,
   setRole,
   updateProduct,
   updateRoute,
+  updateUser,
 } from '../services/admin';
 import { removeSubscription, setSubscription } from '../services/customer';
 import { lockDate } from '../services/locking';
@@ -62,7 +64,14 @@ export async function adminRoutes(app: FastifyInstance, { db, now }: AppContext)
   });
 
   app.get('/users', async () => listUsers(db));
-  app.post('/users', async (req) => createUser(db, parse(createUserInput, req.body)));
+  app.post('/users', async (req) => createUser(db, parse(userInput, req.body)));
+  app.put('/users/:id', async (req) =>
+    updateUser(db, currentUser(req).id, parse(idParams, req.params).id, parse(userInput, req.body)),
+  );
+  app.delete('/users/:id', async (req) => {
+    await removeUser(db, currentUser(req).id, parse(idParams, req.params).id, now());
+    return { ok: true };
+  });
   app.put('/users/:id/role', async (req) =>
     setRole(db, currentUser(req).id, parse(idParams, req.params).id, parse(roleInput, req.body).role),
   );

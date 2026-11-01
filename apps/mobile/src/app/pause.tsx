@@ -1,5 +1,4 @@
 import { addDays, dateRange, firstEditableDate, type Pause } from '@vivid-milks/shared';
-import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView } from 'react-native';
 
@@ -7,6 +6,7 @@ import { Button, Card, Chip, QueryView, Row, Screen, SectionTitle, Text } from '
 import { api } from '@/lib/api';
 import { formatDay } from '@/lib/format';
 import { useApiMutation, useSettings } from '@/lib/queries';
+import { closeScreen } from '@/lib/navigation';
 
 const START_CHOICES = 21;
 const END_CHOICES = 45;
@@ -38,7 +38,7 @@ function PauseForm({ first }: { first: string }) {
   const [untilResume, setUntilResume] = useState(false);
   const save = useApiMutation(
     (body: { startDate: string; endDate: string | null }) => api<{ pause: Pause }>('/me/pause', { method: 'POST', body }),
-    { onSuccess: () => router.back() },
+    { onSuccess: () => closeScreen() },
   );
 
   const end = untilResume ? null : endDate;

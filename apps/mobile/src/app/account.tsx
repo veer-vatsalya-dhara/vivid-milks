@@ -1,4 +1,3 @@
-import { router } from 'expo-router';
 
 import { ProfileForm } from '@/components/profile-form';
 import { Button, Card, Chip, QueryView, Row, Screen, SectionTitle, Text } from '@/components/ui';
@@ -6,6 +5,7 @@ import { showMessage } from '@/lib/alert';
 import { ROLE_LABELS } from '@/lib/format';
 import { useMe } from '@/lib/queries';
 import { useSession } from '@/lib/session';
+import { closeAllScreens } from '@/lib/navigation';
 
 export default function AccountScreen() {
   const { user, mode, modes, setMode, signOut } = useSession();
@@ -34,7 +34,7 @@ export default function AccountScreen() {
                 selected={m === mode}
                 onPress={() => {
                   if (m === mode) return;
-                  router.dismissAll();
+                  closeAllScreens();
                   setMode(m);
                 }}
               />

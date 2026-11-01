@@ -4,7 +4,6 @@ import {
   todayInIst,
   type AdminDashboard,
   type AssignRouteInput,
-  type createUserInput,
   type CustomerDetail,
   type CustomerSummary,
   type LineItem,
@@ -14,12 +13,24 @@ import {
   type Route,
   type RouteInput,
   type User,
+  type userInput,
 } from '@vivid-milks/shared';
-import { and, asc, eq, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 
 import type { Db } from '../db/client';
-import { addresses, deliveries, deliveryItems, products, routes, users } from '../db/schema';
+import { toUser } from '../auth';
+import {
+  addresses,
+  dayOverrides,
+  deliveries,
+  deliveryItems,
+  pauses,
+  products,
+  routes,
+  subscriptions,
+  users,
+} from '../db/schema';
 import { badRequest, conflict, notFound } from '../errors';
 import { customersWithOrders, loadLockedDates, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
 import { getSubscriptions } from './customer';
@@ -27,10 +38,6 @@ import { sumLineItems } from './deliveries';
 import { planDay } from './planner';
 import { getSettings } from './settings';
 import { getWallet } from './wallet';
-
-function toUser(u: typeof users.$inferSelect): User {
-  return { id: u.id, name: u.name, email: u.email, phone: u.phone, role: u.role };
-}
 
 async function routedAddresses(db: Db, customerIds: number[]) {
   if (customerIds.length === 0) return new Map<number, typeof addresses.$inferSelect>();
@@ -146,6 +153,7 @@ export async function listCustomers(db: Db, query: string, now: Date): Promise<C
     .where(
       and(
         ne(users.role, 'delivery'),
+        isNull(users.removedAt),
         q ? or(ilike(users.name, `%${q}%`), ilike(users.phone, `%${q}%`), ilike(addresses.area, `%${q}%`)) : undefined,
       ),
     )
@@ -159,6 +167,7 @@ export async function listCustomers(db: Db, query: string, now: Date): Promise<C
   return rows.map(({ user, area, routeName }) => ({
     id: user.id,
     name: user.name,
+    role: user.role,
     phone: user.phone,
     area,
     routeName,
@@ -202,28 +211,107 @@ export async function assignRoute(db: Db, customerId: number, input: AssignRoute
 // Users and roles
 // ---------------------------------------------------------------------------
 
+/** Everyone who hasn't been removed. */
 export async function listUsers(db: Db): Promise<User[]> {
-  const rows = await db.select().from(users).orderBy(asc(users.name));
+  const rows = await db.select().from(users).where(isNull(users.removedAt)).orderBy(asc(users.name));
   return rows.map(toUser);
 }
 
-export async function createUser(db: Db, input: z.output<typeof createUserInput>): Promise<User> {
+async function assertEmailFree(db: Db, email: string | null, exceptId?: number) {
+  if (!email) return;
+  const [existing] = await db.select().from(users).where(eq(users.email, email));
+  if (existing && existing.id !== exceptId && !existing.removedAt) {
+    throw conflict(`${existing.name} already uses ${email}`);
+  }
+}
+
+/** Adds a person. Re-adding a removed person's email brings their account back. */
+export async function createUser(db: Db, input: z.output<typeof userInput>): Promise<User> {
+  await assertEmailFree(db, input.email);
   if (input.email) {
-    const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, input.email));
-    if (existing) throw conflict('A user with this email already exists');
+    const [removed] = await db.select().from(users).where(eq(users.email, input.email));
+    if (removed) {
+      const [restored] = await db
+        .update(users)
+        .set({ ...input, removedAt: null })
+        .where(eq(users.id, removed.id))
+        .returning();
+      return toUser(restored!);
+    }
   }
   const [user] = await db.insert(users).values(input).returning();
   return toUser(user!);
 }
 
-export async function setRole(db: Db, adminId: number, userId: number, role: Role): Promise<User> {
-  if (userId === adminId && role !== 'admin') throw badRequest('You cannot remove your own admin role');
-  const [user] = await db.update(users).set({ role }).where(eq(users.id, userId)).returning();
-  if (!user) throw notFound('User');
-  if (role !== 'delivery') {
+async function activeUser(db: Db, userId: number) {
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.removedAt)));
+  if (!user) throw notFound('Person');
+  return user;
+}
+
+async function assertAnotherAdmin(db: Db, userId: number) {
+  const [{ count } = { count: 0 }] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(users)
+    .where(and(eq(users.role, 'admin'), isNull(users.removedAt), ne(users.id, userId)));
+  if (count === 0) throw badRequest('There must be at least one admin');
+}
+
+/** Edits a person's details and role. */
+export async function updateUser(
+  db: Db,
+  adminId: number,
+  userId: number,
+  input: z.output<typeof userInput>,
+): Promise<User> {
+  const user = await activeUser(db, userId);
+  if (userId === adminId && input.role !== 'admin') throw badRequest('You cannot remove your own admin role');
+  if (user.role === 'admin' && input.role !== 'admin') await assertAnotherAdmin(db, userId);
+  await assertEmailFree(db, input.email, userId);
+
+  const [updated] = await db.update(users).set(input).where(eq(users.id, userId)).returning();
+  if (input.role !== 'delivery') {
     await db.update(routes).set({ deliveryUserId: null }).where(eq(routes.deliveryUserId, userId));
   }
-  return toUser(user);
+  return toUser(updated!);
+}
+
+export async function setRole(db: Db, adminId: number, userId: number, role: Role): Promise<User> {
+  const user = await activeUser(db, userId);
+  return updateUser(db, adminId, userId, { name: user.name, email: user.email, phone: user.phone, role });
+}
+
+/**
+ * Removes a person: they can no longer sign in, their subscriptions, upcoming day changes
+ * and upcoming deliveries stop, and they leave their route. Past deliveries and wallet
+ * history are kept.
+ */
+export async function removeUser(db: Db, adminId: number, userId: number, now: Date): Promise<void> {
+  if (userId === adminId) throw badRequest('You cannot remove yourself');
+  const user = await activeUser(db, userId);
+  if (user.role === 'admin') await assertAnotherAdmin(db, userId);
+  const today = todayInIst(now);
+
+  await db.transaction(async (tx) => {
+    await tx.update(users).set({ removedAt: now }).where(eq(users.id, userId));
+    await tx.delete(subscriptions).where(eq(subscriptions.customerId, userId));
+    await tx.delete(pauses).where(eq(pauses.customerId, userId));
+    await tx.delete(dayOverrides).where(and(eq(dayOverrides.customerId, userId), gte(dayOverrides.date, today)));
+    await tx
+      .delete(deliveries)
+      .where(
+        and(
+          eq(deliveries.customerId, userId),
+          gte(deliveries.date, today),
+          inArray(deliveries.status, ['pending', 'skipped_low_balance']),
+        ),
+      );
+    await tx.update(addresses).set({ routeId: null, routePosition: null }).where(eq(addresses.userId, userId));
+    await tx.update(routes).set({ deliveryUserId: null }).where(eq(routes.deliveryUserId, userId));
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -246,7 +334,10 @@ export async function listRoutes(db: Db): Promise<Route[]> {
 
 async function assertDeliveryUser(db: Db, userId: number | null) {
   if (userId === null) return;
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, userId), isNull(users.removedAt)));
   if (!user) throw notFound('Delivery person');
   if (user.role === 'customer') throw badRequest(`${user.name} is not delivery staff`);
 }

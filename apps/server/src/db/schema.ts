@@ -23,9 +23,14 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: text('name').notNull(),
+  /** Lowercase. Used to match Google sign-ins to people added by an admin. */
   email: text('email').unique(),
   phone: text('phone'),
   role: roleEnum('role').notNull().default('customer'),
+  /** Google account id, set on first Google sign-in. */
+  googleSub: text('google_sub').unique(),
+  /** Set when an admin removes the person. Removed people can't sign in; their history is kept. */
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 

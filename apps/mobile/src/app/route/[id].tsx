@@ -1,9 +1,10 @@
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { Button, Chip, Field, QueryView, Row, Screen, SectionTitle, Text } from '@/components/ui';
 import { api } from '@/lib/api';
 import { useApiMutation, useRoutes, useUsers } from '@/lib/queries';
+import { closeScreen } from '@/lib/navigation';
 
 export default function RouteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,7 +35,7 @@ function RouteForm(props: { id: number | null; name: string; deliveryUserId: num
         method: props.id === null ? 'POST' : 'PUT',
         body,
       }),
-    { onSuccess: () => router.back() },
+    { onSuccess: () => closeScreen() },
   );
   const staff = (users.data ?? []).filter((u) => u.role !== 'customer');
 

@@ -28,17 +28,20 @@ export class ApiError extends Error {
   }
 }
 
-let signedInUserId: number | null = null;
+/** How requests are signed in: a session token from Google sign-in, or a user id for development sign-in. */
+export type ApiAuth = { token: string } | { devUserId: number } | null;
 
-/** Development sign-in: the user id sent with every request. */
-export function setApiUser(id: number | null) {
-  signedInUserId = id;
+let auth: ApiAuth = null;
+
+export function setApiAuth(next: ApiAuth) {
+  auth = next;
 }
 
 export async function api<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (options.body !== undefined) headers['content-type'] = 'application/json';
-  if (signedInUserId !== null) headers['x-user-id'] = String(signedInUserId);
+  if (auth && 'token' in auth) headers.authorization = `Bearer ${auth.token}`;
+  if (auth && 'devUserId' in auth) headers['x-user-id'] = String(auth.devUserId);
 
   let res: Response;
   try {

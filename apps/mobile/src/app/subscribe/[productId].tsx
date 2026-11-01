@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { ProductRow } from '@/components/product-row';
@@ -6,6 +6,7 @@ import { Button, Card, QueryView, Row, Screen, Stepper, Text } from '@/component
 import { api } from '@/lib/api';
 import { formatRupees } from '@/lib/format';
 import { useApiMutation, useProducts, useSubscriptions } from '@/lib/queries';
+import { closeScreen } from '@/lib/navigation';
 
 export default function SubscribeScreen() {
   const productId = Number(useLocalSearchParams<{ productId: string }>().productId);
@@ -37,7 +38,7 @@ function SubscribeForm({
   current: number | null;
 }) {
   const [qty, setQty] = useState(current ?? 1);
-  const close = { onSuccess: () => router.back() };
+  const close = { onSuccess: () => closeScreen() };
   const save = useApiMutation(
     () => api(`/me/subscriptions/${productId}`, { method: 'PUT', body: { defaultQty: qty } }),
     close,
