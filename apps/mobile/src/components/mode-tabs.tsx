@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import type { ReactNode } from 'react';
@@ -34,8 +35,12 @@ export function AccountButton({ color }: { color?: string }) {
 /** Bottom tabs for one mode. Each header ends with `headerExtra` (if any) and the account button. */
 export function ModeTabs({ tabs, headerExtra }: { tabs: TabSpec[]; headerExtra?: () => ReactNode }) {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   return (
     <Tabs
+      // Tabs stay mounted, so their data can go stale (e.g. a payment approved on another device).
+      // Opening a tab refreshes what's on screen.
+      screenListeners={{ focus: () => void queryClient.invalidateQueries() }}
       screenOptions={{
         tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,

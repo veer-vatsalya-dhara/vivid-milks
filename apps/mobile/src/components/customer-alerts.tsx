@@ -26,23 +26,22 @@ export function CustomerAlerts({ home }: { home: CustomerHome }) {
           <Text type="small">Please choose your building, block and floor so we can find your door quickly.</Text>
           <Button title="Update address" onPress={() => router.push('/account')} small />
         </Card>
-      ) : !me.routeName ? (
-        <Card tone="info">
-          <Text type="smallBold">Almost there</Text>
-          <Text type="small">
-            Deliveries start once our team adds your address to a delivery route. You can set up your milk now.
-          </Text>
-        </Card>
       ) : null}
 
       {shortfallPaise !== null && (
         <Card tone="danger">
           <Text type="smallBold">Low balance: add {formatRupees(shortfallPaise)}</Text>
           <Text type="small">
-            Top up before {cutoffText(nextDay.date, settings.orderCutoffTime)} or{' '}
-            {formatRelativeDay(nextDay.date).toLowerCase()}’s milk won’t be delivered. Pay the Vivid Milks team by
-            cash or UPI and they’ll add it to your wallet.
+            {formatRelativeDay(nextDay.date)}’s order ({formatDay(nextDay.date)}) is {formatRupees(nextDay.totalPaise)}
+            , but only {formatRupees(home.wallet.availablePaise)} is available
+            {home.wallet.availablePaise !== home.wallet.balancePaise
+              ? ` (balance ${formatRupees(home.wallet.balancePaise)}, with ${formatRupees(
+                  home.wallet.balancePaise - home.wallet.availablePaise,
+                )} set aside for confirmed deliveries)`
+              : ''}
+            . Top up before {cutoffText(nextDay.date, settings.orderCutoffTime)} or that day’s milk won’t be delivered.
           </Text>
+          <Button title="Add money" small onPress={() => router.push('/wallet')} />
         </Card>
       )}
 

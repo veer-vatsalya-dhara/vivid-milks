@@ -13,7 +13,6 @@ import type {
   PaymentQr,
   PaymentRequest,
   Product,
-  Route,
   Schedule,
   Subscription,
   User,
@@ -45,11 +44,7 @@ export const useSchedule = (from: IsoDate, to: IsoDate) =>
   useQuery({ queryKey: ['schedule', from, to], queryFn: get<Schedule>(`/me/schedule?from=${from}&to=${to}`) });
 
 // Delivery
-export const useDeliveryRun = (routeId: number | null) =>
-  useQuery({
-    queryKey: ['run', routeId],
-    queryFn: get<DeliveryRun>(routeId === null ? '/delivery/run' : `/delivery/run?routeId=${routeId}`),
-  });
+export const useDeliveryRun = () => useQuery({ queryKey: ['run'], queryFn: get<DeliveryRun>('/delivery/run') });
 
 // Admin
 export const useDashboard = () => useQuery({ queryKey: ['dashboard'], queryFn: get<AdminDashboard>('/admin/dashboard') });
@@ -61,7 +56,6 @@ export const useCustomers = (q: string) =>
 export const useCustomer = (id: number) =>
   useQuery({ queryKey: ['customer', id], queryFn: get<CustomerDetail>(`/admin/customers/${id}`) });
 export const useUsers = () => useQuery({ queryKey: ['users'], queryFn: get<User[]>('/admin/users') });
-export const useRoutes = () => useQuery({ queryKey: ['routes'], queryFn: get<Route[]>('/admin/routes') });
 export const useAllProducts = () =>
   useQuery({ queryKey: ['admin-products'], queryFn: get<Product[]>('/admin/products') });
 

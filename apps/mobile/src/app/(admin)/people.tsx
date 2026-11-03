@@ -49,7 +49,7 @@ function CustomerList() {
                   </Text>
                 </Row>
                 <Text type="small" themeColor="textSecondary">
-                  {[c.phone, c.area, c.routeName ?? 'No route'].filter(Boolean).join(' · ')}
+                  {[c.phone, c.area].filter(Boolean).join(' · ')}
                 </Text>
               </Card>
             ))

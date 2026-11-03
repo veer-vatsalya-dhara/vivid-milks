@@ -1,4 +1,5 @@
 import {
+  compareForDelivery,
   todayInIst,
   type DeliveryRun,
   type Drop,
@@ -8,11 +9,11 @@ import {
   type User,
 } from '@vivid-milks/shared';
 import type { z } from 'zod';
-import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, ne } from 'drizzle-orm';
 
 import type { Db } from '../db/client';
 import { addresses, buildings, deliveries, deliveryItems, products, routes, users, walletTxns } from '../db/schema';
-import { badRequest, conflict, forbidden, notFound } from '../errors';
+import { badRequest, conflict, notFound } from '../errors';
 import { toAddress } from './buildings';
 import { loadLockedDates } from './data';
 
@@ -27,16 +28,9 @@ export function sumLineItems(items: LineItem[]): LineItem[] {
   return [...totals.values()].sort((a, b) => a.productId - b.productId);
 }
 
-/** Drops for `date`. Delivery staff see the routes currently assigned to them; admins see all, optionally one route. */
-export async function getDeliveryRun(
-  db: Db,
-  user: User,
-  date: IsoDate,
-  routeId: number | null,
-): Promise<DeliveryRun> {
+/** Every drop for `date`, in walking order: building, block, then floor from the top. */
+export async function getDeliveryRun(db: Db, date: IsoDate): Promise<DeliveryRun> {
   const conditions = [eq(deliveries.date, date), ne(deliveries.status, 'skipped_low_balance')];
-  if (user.role === 'delivery') conditions.push(eq(routes.deliveryUserId, user.id));
-  if (routeId !== null) conditions.push(eq(deliveries.routeId, routeId));
 
   const rows = await db
     .select({
@@ -51,8 +45,8 @@ export async function getDeliveryRun(
     .leftJoin(addresses, eq(addresses.userId, deliveries.customerId))
     .leftJoin(buildings, eq(buildings.id, addresses.buildingId))
     .leftJoin(routes, eq(routes.id, deliveries.routeId))
-    .where(and(...conditions))
-    .orderBy(asc(routes.name), sql`${deliveries.routePosition} asc nulls last`, asc(users.name));
+    .where(and(...conditions));
+  rows.sort((a, b) => compareForDelivery(sortKey(a), sortKey(b)));
 
   const itemRows = rows.length
     ? await db
@@ -92,9 +86,25 @@ export async function getDeliveryRun(
   return { date, locked, totals: sumLineItems(drops.flatMap((d) => d.items)), drops };
 }
 
+type RunRow = {
+  customer: typeof users.$inferSelect;
+  address: typeof addresses.$inferSelect | null;
+  buildingName: string | null;
+};
+
+function sortKey({ customer, address, buildingName }: RunRow) {
+  return {
+    building: buildingName,
+    block: address?.block ?? '',
+    floor: address?.floor ?? null,
+    flat: address?.line1 ?? '',
+    name: customer.name,
+  };
+}
+
 /**
  * Marks a drop. Delivered debits the wallet; any other status removes that debit, so
- * mistakes can be undone. Delivery staff can only mark today's drops on their routes.
+ * mistakes can be undone. Delivery staff can only mark today's drops.
  */
 export async function markDelivery(
   db: Db,
@@ -103,17 +113,11 @@ export async function markDelivery(
   input: z.output<typeof markDeliveryInput>,
   now: Date,
 ): Promise<{ id: number; status: Drop['status']; reason: Drop['reason'] }> {
-  const [row] = await db
-    .select({ delivery: deliveries, routeDeliveryUserId: routes.deliveryUserId })
-    .from(deliveries)
-    .leftJoin(routes, eq(routes.id, deliveries.routeId))
-    .where(eq(deliveries.id, deliveryId));
-  if (!row) throw notFound('Delivery');
-  const { delivery } = row;
+  const [delivery] = await db.select().from(deliveries).where(eq(deliveries.id, deliveryId));
+  if (!delivery) throw notFound('Delivery');
 
   const today = todayInIst(now);
   if (user.role === 'delivery') {
-    if (row.routeDeliveryUserId !== user.id) throw forbidden('This drop is not on your route');
     if (delivery.date !== today) throw badRequest("Only today's drops can be updated");
   } else if (delivery.date > today) {
     throw badRequest('This delivery is not due yet');

@@ -64,6 +64,32 @@ export interface Building {
   customerCount: number;
 }
 
+export interface DeliverySortKey {
+  /** Null when the address has no building from the list; those go last. */
+  building: string | null;
+  block: string;
+  floor: number | null;
+  flat: string;
+  name: string;
+}
+
+const naturalOrder = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
+
+/**
+ * The order delivery staff walk in: buildings Z→A, then blocks A→Z, then floors top-down,
+ * then flats in number order. Addresses without a building go last.
+ */
+export function compareForDelivery(a: DeliverySortKey, b: DeliverySortKey): number {
+  if ((a.building === null) !== (b.building === null)) return a.building === null ? 1 : -1;
+  return (
+    naturalOrder.compare(b.building ?? '', a.building ?? '') ||
+    naturalOrder.compare(a.block, b.block) ||
+    (b.floor ?? -1) - (a.floor ?? -1) ||
+    naturalOrder.compare(a.flat, b.flat) ||
+    naturalOrder.compare(a.name, b.name)
+  );
+}
+
 /** "Flat 502, B Block, Floor 5, Vaswani Brentwood, Near park gate" */
 export function formatAddress(address: Address): string {
   const parts = [
@@ -221,15 +247,6 @@ export interface DeliveryRun {
   drops: Drop[];
 }
 
-export interface RouteProgress {
-  routeId: number;
-  routeName: string;
-  deliveryUserName: string | null;
-  total: number;
-  delivered: number;
-  notDelivered: number;
-}
-
 export interface CustomerBalanceAlert {
   id: number;
   name: string;
@@ -250,9 +267,10 @@ export interface AdminDashboard {
     /** Customers left out because their wallet doesn't cover the order. */
     skippedLowBalance: number;
   };
-  today: { date: IsoDate; routes: RouteProgress[]; skippedLowBalance: number };
+  today: { date: IsoDate; total: number; delivered: number; notDelivered: number; skippedLowBalance: number };
   lowBalanceCustomers: CustomerBalanceAlert[];
-  unroutedCustomers: { id: number; name: string }[];
+  /** Customers with orders but no delivery address, so nothing can be delivered. */
+  noAddressCustomers: { id: number; name: string }[];
   pendingPayments: PaymentRequest[];
 }
 

@@ -6,7 +6,6 @@ export default function AdminLayout() {
       tabs={[
         { name: 'dashboard', title: 'Dashboard', icon: 'dashboard' },
         { name: 'people', title: 'People', icon: 'people' },
-        { name: 'routes', title: 'Routes', icon: 'route' },
         { name: 'catalog', title: 'Products', icon: 'milk' },
         { name: 'settings', title: 'Settings', icon: 'settings' },
       ]}

@@ -1,4 +1,4 @@
-import type { AdminDashboard, LineItem, PaymentRequest, RouteProgress } from '@vivid-milks/shared';
+import type { AdminDashboard, LineItem, PaymentRequest } from '@vivid-milks/shared';
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
@@ -23,9 +23,9 @@ export default function DashboardScreen() {
             <StatTiles dashboard={d} />
             <MilkNeeded totals={d.tomorrow.totals} />
             <PendingPayments payments={d.pendingPayments} />
-            <TodayRoutes today={d.today} />
+            <TodayProgress today={d.today} />
             <LowBalance customers={d.lowBalanceCustomers} />
-            <Unrouted customers={d.unroutedCustomers} />
+            <NoAddress customers={d.noAddressCustomers} />
           </>
         )}
       </QueryView>
@@ -84,8 +84,8 @@ function TomorrowHero({ tomorrow }: { tomorrow: AdminDashboard['tomorrow'] }) {
 }
 
 function StatTiles({ dashboard: d }: { dashboard: AdminDashboard }) {
-  const todayTotal = d.today.routes.reduce((sum, r) => sum + r.total, 0);
-  const todayDone = d.today.routes.reduce((sum, r) => sum + r.delivered + r.notDelivered, 0);
+  const todayTotal = d.today.total;
+  const todayDone = d.today.delivered + d.today.notDelivered;
   return (
     <View style={styles.tiles}>
       <StatTile
@@ -114,11 +114,11 @@ function StatTiles({ dashboard: d }: { dashboard: AdminDashboard }) {
         tone={d.lowBalanceCustomers.length ? 'danger' : 'default'}
       />
       <StatTile
-        icon="route"
-        label="Need a route"
-        value={String(d.unroutedCustomers.length)}
-        note={d.unroutedCustomers.length ? 'Not delivered yet' : 'All assigned'}
-        tone={d.unroutedCustomers.length ? 'warning' : 'default'}
+        icon="location"
+        label="No address"
+        value={String(d.noAddressCustomers.length)}
+        note={d.noAddressCustomers.length ? 'Can’t be delivered' : 'All set'}
+        tone={d.noAddressCustomers.length ? 'warning' : 'default'}
       />
     </View>
   );
@@ -268,20 +268,41 @@ function PaymentRow({ payment: p }: { payment: PaymentRequest }) {
   );
 }
 
-function TodayRoutes({ today }: { today: AdminDashboard['today'] }) {
+/** Today's drops: delivered and not-delivered segments on one track, with the counts in words. */
+function TodayProgress({ today }: { today: AdminDashboard['today'] }) {
+  const theme = useTheme();
+  const done = today.delivered + today.notDelivered;
+  const pct = (n: number) => `${today.total ? (n / today.total) * 100 : 0}%` as const;
   return (
     <>
       <SectionTitle>Today · {formatDay(today.date)}</SectionTitle>
-      {today.routes.length === 0 ? (
+      {today.total === 0 ? (
         <Text themeColor="textSecondary">No deliveries today.</Text>
       ) : (
         <Card>
-          {today.routes.map((r, i) => (
-            <View key={r.routeId} style={{ gap: Spacing.one }}>
-              {i > 0 && <Divider />}
-              <RouteMeter route={r} />
-            </View>
-          ))}
+          <Row>
+            <Text type="smallBold" style={{ flex: 1 }}>
+              Deliveries
+            </Text>
+            <Text type="small" themeColor="textSecondary">
+              {done} of {today.total} done
+            </Text>
+          </Row>
+          <View
+            style={[styles.track, styles.meter, { backgroundColor: theme.backgroundSelected }]}
+            accessibilityLabel={`${today.delivered} delivered, ${today.notDelivered} not delivered, ${today.total - done} left`}>
+            {today.delivered > 0 && <View style={{ width: pct(today.delivered), backgroundColor: theme.success }} />}
+            {today.notDelivered > 0 && (
+              <View
+                style={{ width: pct(today.notDelivered), backgroundColor: theme.danger, marginLeft: today.delivered ? 2 : 0 }}
+              />
+            )}
+          </View>
+          <Text type="caption" themeColor="textSecondary">
+            {today.delivered} delivered
+            {today.notDelivered ? ` · ${today.notDelivered} not delivered` : ''}
+            {today.total - done ? ` · ${today.total - done} left` : ''}
+          </Text>
         </Card>
       )}
       {today.skippedLowBalance > 0 && (
@@ -293,38 +314,6 @@ function TodayRoutes({ today }: { today: AdminDashboard['today'] }) {
         </Row>
       )}
     </>
-  );
-}
-
-/** Progress along one route: delivered and not-delivered segments on a track, with the counts in words. */
-function RouteMeter({ route: r }: { route: RouteProgress }) {
-  const theme = useTheme();
-  const done = r.delivered + r.notDelivered;
-  const pct = (n: number) => `${r.total ? (n / r.total) * 100 : 0}%` as const;
-  return (
-    <View style={{ gap: 6, paddingTop: Spacing.one }}>
-      <Row>
-        <Text type="smallBold" style={{ flex: 1 }}>
-          {r.routeName}
-        </Text>
-        <Text type="small" themeColor="textSecondary">
-          {done} of {r.total}
-        </Text>
-      </Row>
-      <View
-        style={[styles.track, styles.meter, { backgroundColor: theme.backgroundSelected }]}
-        accessibilityLabel={`${r.delivered} delivered, ${r.notDelivered} not delivered, ${r.total - done} left`}>
-        {r.delivered > 0 && <View style={{ width: pct(r.delivered), backgroundColor: theme.success }} />}
-        {r.notDelivered > 0 && (
-          <View style={{ width: pct(r.notDelivered), backgroundColor: theme.danger, marginLeft: r.delivered ? 2 : 0 }} />
-        )}
-      </View>
-      <Text type="caption" themeColor="textSecondary">
-        {r.deliveryUserName ?? 'No delivery person'} · {r.delivered} delivered
-        {r.notDelivered ? ` · ${r.notDelivered} not delivered` : ''}
-        {r.total - done ? ` · ${r.total - done} left` : ''}
-      </Text>
-    </View>
   );
 }
 
@@ -361,14 +350,15 @@ function LowBalance({ customers }: { customers: AdminDashboard['lowBalanceCustom
   );
 }
 
-function Unrouted({ customers }: { customers: AdminDashboard['unroutedCustomers'] }) {
+function NoAddress({ customers }: { customers: AdminDashboard['noAddressCustomers'] }) {
   const theme = useTheme();
   if (customers.length === 0) return null;
   return (
     <>
-      <SectionTitle>Waiting for a route</SectionTitle>
+      <SectionTitle>No delivery address</SectionTitle>
       <Text type="small" themeColor="textSecondary">
-        They have orders but no delivery route, so nothing will be delivered. Tap to assign one.
+        They have orders but haven’t added their address, so nothing will be delivered. Ask them to add it under
+        Account.
       </Text>
       <Card style={{ gap: 0, paddingVertical: Spacing.one }}>
         {customers.map((c, i) => (

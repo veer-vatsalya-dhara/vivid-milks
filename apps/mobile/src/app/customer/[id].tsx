@@ -7,7 +7,7 @@ import { Button, Card, Chip, Field, QueryView, Row, Screen, SectionTitle, Steppe
 import { showMessage } from '@/lib/alert';
 import { api } from '@/lib/api';
 import { formatDay, formatRupees } from '@/lib/format';
-import { useApiMutation, useCustomer, useProducts, useRoutes } from '@/lib/queries';
+import { useApiMutation, useCustomer, useProducts } from '@/lib/queries';
 
 export default function CustomerScreen() {
   const id = Number(useLocalSearchParams<{ id: string }>().id);
@@ -21,7 +21,6 @@ export default function CustomerScreen() {
             <Stack.Screen options={{ title: c.user.name }} />
             <Details customer={c} />
             <WalletSection customer={c} />
-            <RouteSection customer={c} />
             <SubscriptionsSection customer={c} />
           </>
         )}
@@ -113,56 +112,6 @@ function WalletSection({ customer }: { customer: CustomerDetail }) {
             </Text>
           </Row>
         ))}
-      </Card>
-    </>
-  );
-}
-
-function RouteSection({ customer }: { customer: CustomerDetail }) {
-  const routes = useRoutes();
-  const [routeId, setRouteId] = useState(customer.routeId);
-  const [position, setPosition] = useState(customer.routePosition?.toString() ?? '');
-  const save = useApiMutation(
-    (body: { routeId: number | null; routePosition: number | null }) =>
-      api(`/admin/customers/${customer.user.id}/route`, { method: 'PUT', body }),
-    { onSuccess: () => showMessage('Route saved') },
-  );
-
-  if (!customer.address) {
-    return (
-      <>
-        <SectionTitle>Delivery route</SectionTitle>
-        <Text themeColor="textSecondary">Add an address before assigning a route.</Text>
-      </>
-    );
-  }
-
-  const positionNumber = position.trim() === '' ? null : Number(position);
-  return (
-    <>
-      <SectionTitle>Delivery route</SectionTitle>
-      <Card>
-        <Row style={{ flexWrap: 'wrap' }}>
-          <Chip label="None" selected={routeId === null} onPress={() => setRouteId(null)} />
-          {(routes.data ?? []).map((r) => (
-            <Chip key={r.id} label={r.name} selected={routeId === r.id} onPress={() => setRouteId(r.id)} />
-          ))}
-        </Row>
-        {routeId !== null && (
-          <Field
-            label="Stop number on the route"
-            value={position}
-            onChangeText={setPosition}
-            keyboardType="number-pad"
-            placeholder="e.g. 4"
-          />
-        )}
-        <Button
-          title="Save route"
-          loading={save.isPending}
-          disabled={positionNumber !== null && !(Number.isInteger(positionNumber) && positionNumber > 0)}
-          onPress={() => save.mutate({ routeId, routePosition: routeId === null ? null : positionNumber })}
-        />
       </Card>
     </>
   );

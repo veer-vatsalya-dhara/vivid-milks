@@ -9,7 +9,7 @@ import { getSettings } from './settings';
 
 /**
  * Turns every customer's order for `date` into a delivery. Runs once per date; later calls
- * are no-ops. Customers without a route get nothing; customers whose available balance
+ * are no-ops. Customers without an address get nothing; customers whose available balance
  * doesn't cover the whole order get a `skipped_low_balance` record instead.
  */
 export async function lockDate(db: Db, date: IsoDate, now: Date): Promise<LockResult> {
@@ -30,7 +30,7 @@ export async function lockDate(db: Db, date: IsoDate, now: Date): Promise<LockRe
     let skippedLowBalance = 0;
     for (const customerId of customerIds) {
       const address = addressByCustomer.get(customerId);
-      if (!address?.routeId) continue;
+      if (!address) continue;
       const plan = planDay(date, inputs.get(customerId)!, products);
       const items = plan.items.filter((i) => i.qty > 0);
       if (items.length === 0) continue;

@@ -1,9 +1,9 @@
-import { formatTimeOfDay, type IsoDate } from '@vivid-milks/shared';
+import { compareForDelivery, formatTimeOfDay, type IsoDate } from '@vivid-milks/shared';
 import ExcelJS from 'exceljs';
 import { inArray } from 'drizzle-orm';
 
 import type { Db } from '../db/client';
-import { addresses, buildings, routes, users } from '../db/schema';
+import { addresses, buildings, users } from '../db/schema';
 import { getDayOrders, type DayOrder } from './day-orders';
 import { getSettings } from './settings';
 
@@ -17,42 +17,24 @@ interface ExportRow {
   name: string;
   phone: string;
   landmark: string;
-  route: string;
 }
 
-const natural = new Intl.Collator('en', { numeric: true, sensitivity: 'base' });
-
-/**
- * Delivery order: buildings Z→A, then blocks A→Z, then floors top-down, then flats in
- * number order. Addresses without a building go last.
- */
-export function compareForDelivery(a: ExportRow, b: ExportRow): number {
-  if (a.hasBuilding !== b.hasBuilding) return a.hasBuilding ? -1 : 1;
-  return (
-    natural.compare(b.building, a.building) ||
-    natural.compare(a.block, b.block) ||
-    (b.floor ?? -1) - (a.floor ?? -1) ||
-    natural.compare(a.flat, b.flat) ||
-    natural.compare(a.name, b.name)
-  );
-}
+const sortKey = (r: ExportRow) => ({ ...r, building: r.hasBuilding ? r.building : null });
 
 /** Excel workbook of the day's orders: the delivery list, product totals, and who was skipped for low balance. */
 export async function buildOrdersWorkbook(db: Db, date: IsoDate, now: Date): Promise<Buffer> {
   const [{ orders, products, locked }, settings] = await Promise.all([getDayOrders(db, date, now), getSettings(db)]);
   const customerIds = orders.map((o) => o.customerId);
-  const [people, addressRows, buildingRows, routeRows] = customerIds.length
+  const [people, addressRows, buildingRows] = customerIds.length
     ? await Promise.all([
         db.select().from(users).where(inArray(users.id, customerIds)),
         db.select().from(addresses).where(inArray(addresses.userId, customerIds)),
         db.select().from(buildings),
-        db.select().from(routes),
       ])
-    : [[], [], [], []];
+    : [[], [], []];
   const personById = new Map(people.map((p) => [p.id, p]));
   const addressById = new Map(addressRows.map((a) => [a.userId, a]));
   const buildingById = new Map(buildingRows.map((b) => [b.id, b.name]));
-  const routeById = new Map(routeRows.map((r) => [r.id, r.name]));
 
   const rows: ExportRow[] = orders.map((order) => {
     const address = addressById.get(order.customerId);
@@ -68,10 +50,9 @@ export async function buildOrdersWorkbook(db: Db, date: IsoDate, now: Date): Pro
       name: person?.name ?? '',
       phone: person?.phone ?? '',
       landmark: [address?.area, address?.landmark].filter(Boolean).join(', '),
-      route: order.routeId ? (routeById.get(order.routeId) ?? '') : '',
     };
   });
-  rows.sort(compareForDelivery);
+  rows.sort((a, b) => compareForDelivery(sortKey(a), sortKey(b)));
   const delivering = rows.filter((r) => r.order.status !== 'skipped_low_balance');
   const skipped = rows.filter((r) => r.order.status === 'skipped_low_balance');
 
@@ -109,7 +90,6 @@ export async function buildOrdersWorkbook(db: Db, date: IsoDate, now: Date): Pro
     ...productIds.map(productLabel),
     'Amount (₹)',
     'Landmark',
-    'Route',
     'Delivered ✓',
   ];
   const headerRow = sheet.addRow(header);
@@ -131,7 +111,6 @@ export async function buildOrdersWorkbook(db: Db, date: IsoDate, now: Date): Pro
       ...productIds.map((id) => qtyById.get(id) ?? ''),
       r.order.totalPaise / 100,
       r.landmark,
-      r.route,
       '',
     ]);
   });
@@ -150,7 +129,7 @@ export async function buildOrdersWorkbook(db: Db, date: IsoDate, now: Date): Pro
   ]);
   totalsRow.font = { bold: true };
   sheet.columns.forEach((column, i) => {
-    const widths = [5, 26, 8, 8, 10, 22, 14, ...productIds.map(() => 12), 12, 24, 14, 12];
+    const widths = [5, 26, 8, 8, 10, 22, 14, ...productIds.map(() => 12), 12, 24, 12];
     column.width = widths[i] ?? 12;
   });
   sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: header.length } };

@@ -201,9 +201,21 @@ describe('products', () => {
 describe('low balance', () => {
   it('leaves customers who can’t pay out of tomorrow’s totals', async () => {
     const { body } = await call<AdminDashboard>(ADMIN, 'GET', '/api/admin/dashboard');
-    // Asha 2 × Cow 500 ml and the admin 1 × Cow 500 ml; Rahul's ₹104 order is skipped.
-    expect(body.tomorrow).toMatchObject({ customerCount: 2, skippedLowBalance: 1, totalPaise: 3 * 3400 });
-    expect(body.tomorrow.totals).toEqual([{ productId: COW_500, name: 'Cow Milk', unitLabel: '500 ml', qty: 3 }]);
+    // Asha 2, the admin 1 and Priya 1 × Cow 500 ml; Rahul's ₹104 order is skipped.
+    expect(body.tomorrow).toMatchObject({ customerCount: 3, skippedLowBalance: 1, totalPaise: 4 * 3400 });
+    expect(body.tomorrow.totals).toEqual([{ productId: COW_500, name: 'Cow Milk', unitLabel: '500 ml', qty: 4 }]);
+  });
+});
+
+describe('no routes needed', () => {
+  it('delivers to a customer with an address but no route, and shows the drop to any delivery person', async () => {
+    const sunil = (await call<{ id: number }>(ADMIN, 'POST', '/api/admin/users', { name: 'Sunil (Delivery)', role: 'delivery' }))
+      .body.id;
+    await call(ADMIN, 'POST', '/api/admin/lock', { date: '2026-11-01' });
+    const run = await call<{ drops: { id: number; customerName: string }[] }>(sunil, 'GET', '/api/delivery/run');
+    const priya = run.body.drops.find((d) => d.customerName === 'Priya Nair')!;
+    expect(priya).toBeDefined();
+    expect((await call(sunil, 'POST', `/api/delivery/drops/${priya.id}/mark`, { status: 'delivered' })).status).toBe(200);
   });
 });
 
@@ -248,6 +260,7 @@ describe('Excel export', () => {
     });
     expect(rows).toEqual([
       'Vaswani Brentwood|A|2|Asha Sharma',
+      'Lake View Apartments||3|Priya Nair',
       'Green Park Residency|B|4|Admin',
       'Green Park Residency|B|Ground|Rahul Verma',
       'Total|||',

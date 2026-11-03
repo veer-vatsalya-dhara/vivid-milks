@@ -9,7 +9,6 @@ import { getDeliveryRun, markDelivery } from '../services/deliveries';
 
 const runQuery = z.object({
   date: z.string().refine(isIsoDate, 'Expected YYYY-MM-DD').optional(),
-  routeId: z.coerce.number().int().optional(),
 });
 const dropParams = z.object({ id: z.coerce.number().int() });
 
@@ -17,8 +16,8 @@ export async function deliveryRoutes(app: FastifyInstance, { db, now }: AppConte
   app.addHook('preHandler', requireRole('delivery', 'admin'));
 
   app.get('/run', async (req) => {
-    const { date = todayInIst(now()), routeId } = parse(runQuery, req.query);
-    return getDeliveryRun(db, currentUser(req), date, routeId ?? null);
+    const { date = todayInIst(now()) } = parse(runQuery, req.query);
+    return getDeliveryRun(db, date);
   });
 
   app.post('/drops/:id/mark', async (req) => {

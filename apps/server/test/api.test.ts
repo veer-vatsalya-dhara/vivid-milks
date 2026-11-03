@@ -113,16 +113,16 @@ describe('locking and delivery', () => {
     return call<LockResult>(ADMIN, 'POST', '/api/admin/lock', { date: '2026-11-02' });
   }
 
-  it('creates deliveries only for routed customers with enough balance', async () => {
+  it('creates deliveries for customers with an address and enough balance, route or not', async () => {
     const { body } = await lockNov2();
-    // Asha and Admin are routed with balance. Rahul's ₹104 order exceeds his ₹50. Priya has no route.
-    expect(body).toEqual({ date: '2026-11-02', alreadyLocked: false, created: 2, skippedLowBalance: 1 });
+    // Asha, Admin and Priya (no route) have balance. Rahul's ₹104 order exceeds his ₹50.
+    expect(body).toEqual({ date: '2026-11-02', alreadyLocked: false, created: 3, skippedLowBalance: 1 });
     expect((await lockNov2()).body.alreadyLocked).toBe(true);
 
     const rahul = await call<Schedule>(RAHUL, 'GET', '/api/me/schedule?from=2026-11-02&to=2026-11-02');
     expect(rahul.body.days[0]).toMatchObject({ status: 'skipped_low_balance', editable: false });
     const priya = await call<Schedule>(PRIYA, 'GET', '/api/me/schedule?from=2026-11-02&to=2026-11-02');
-    expect(priya.body.days[0]).toMatchObject({ status: 'none' });
+    expect(priya.body.days[0]).toMatchObject({ status: 'pending' });
   });
 
   it('flags low balances before the cutoff', async () => {
@@ -131,7 +131,7 @@ describe('locking and delivery', () => {
 
     const { body } = await call<AdminDashboard>(ADMIN, 'GET', '/api/admin/dashboard');
     expect(body.lowBalanceCustomers.map((c) => c.id)).toEqual([RAHUL]);
-    expect(body.unroutedCustomers.map((c) => c.id)).toEqual([PRIYA]);
+    expect(body.noAddressCustomers).toEqual([]);
     expect(body.tomorrow.locked).toBe(false);
   });
 
@@ -139,11 +139,12 @@ describe('locking and delivery', () => {
     await lockNov2();
     clock = ist('2026-11-02', '06:00');
 
+    // Everyone's drops, by building (Z→A), block, then floor from the top.
     const run = await call<DeliveryRun>(RAVI, 'GET', '/api/delivery/run');
-    expect(run.body.drops.map((d) => d.customerName)).toEqual(['Asha Sharma', 'Admin']);
-    expect(run.body.totals).toEqual([{ productId: COW_500, name: 'Cow Milk', unitLabel: '500 ml', qty: 3 }]);
+    expect(run.body.drops.map((d) => d.customerName)).toEqual(['Priya Nair', 'Asha Sharma', 'Admin']);
+    expect(run.body.totals).toEqual([{ productId: COW_500, name: 'Cow Milk', unitLabel: '500 ml', qty: 4 }]);
 
-    const asha = run.body.drops[0]!.id;
+    const asha = run.body.drops[1]!.id;
     const balance = async () => (await call<Wallet>(ASHA, 'GET', '/api/me/wallet')).body.balancePaise;
 
     await call(RAVI, 'POST', `/api/delivery/drops/${asha}/mark`, { status: 'delivered' });
@@ -181,6 +182,6 @@ describe('locking and delivery', () => {
   it('resumes deliveries after a top-up', async () => {
     await call(ADMIN, 'POST', `/api/admin/customers/${RAHUL}/wallet`, { amountPaise: 10000, note: 'Cash' });
     const { body } = await lockNov2();
-    expect(body).toMatchObject({ created: 3, skippedLowBalance: 0 });
+    expect(body).toMatchObject({ created: 4, skippedLowBalance: 0 });
   });
 });

@@ -24,7 +24,7 @@ export interface DayOrders {
 
 /**
  * Orders for `date`. Once locked, these are the recorded deliveries. Before that, they are
- * worked out the same way locking will: customers without a route get nothing, and those
+ * worked out the same way locking will: customers without an address get nothing, and those
  * whose available balance doesn't cover the order are marked `skipped_low_balance`.
  */
 export async function getDayOrders(db: Db, date: IsoDate, now: Date): Promise<DayOrders> {
@@ -66,12 +66,13 @@ export async function getDayOrders(db: Db, date: IsoDate, now: Date): Promise<Da
     loadWalletSummaries(db, customerIds, todayInIst(now)),
     customerIds.length ? db.select().from(addresses).where(inArray(addresses.userId, customerIds)) : [],
   ]);
-  const routeByCustomer = new Map(addressRows.map((a) => [a.userId, a.routeId]));
+  const addressByCustomer = new Map(addressRows.map((a) => [a.userId, a]));
 
   const orders: DayOrder[] = [];
   for (const customerId of customerIds) {
-    const routeId = routeByCustomer.get(customerId);
-    if (!routeId) continue;
+    const address = addressByCustomer.get(customerId);
+    if (!address) continue;
+    const routeId = address.routeId;
     const plan = planDay(date, inputs.get(customerId)!, products);
     const items = plan.items.filter((i) => i.qty > 0);
     if (items.length === 0) continue;

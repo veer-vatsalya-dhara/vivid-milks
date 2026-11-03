@@ -43,7 +43,7 @@ import { planDay } from './planner';
 import { getSettings } from './settings';
 import { getWallet } from './wallet';
 
-async function routedAddresses(db: Db, customerIds: number[]) {
+async function customerAddresses(db: Db, customerIds: number[]) {
   if (customerIds.length === 0) return new Map<number, typeof addresses.$inferSelect>();
   const rows = await db.select().from(addresses).where(inArray(addresses.userId, customerIds));
   return new Map(rows.map((a) => [a.userId, a]));
@@ -65,34 +65,23 @@ export async function getDashboard(db: Db, now: Date): Promise<AdminDashboard> {
   const customerIds = await customersWithOrders(db, nextOpen, nextOpen);
   const [inputs, addressByCustomer, wallets] = await Promise.all([
     loadPlanInputs(db, customerIds, nextOpen, nextOpen),
-    routedAddresses(db, customerIds),
+    customerAddresses(db, customerIds),
     loadWalletSummaries(db, customerIds, today),
   ]);
-  const routedIds = customerIds.filter((id) => addressByCustomer.get(id)?.routeId);
+  const withAddress = customerIds.filter((id) => addressByCustomer.has(id));
 
-  const progressRows = await db
+  const [progress = { total: 0, delivered: 0, notDelivered: 0, skippedLowBalance: 0 }] = await db
     .select({
-      routeId: routes.id,
-      routeName: routes.name,
-      deliveryUserName: users.name,
-      total: sql<number>`count(${deliveries.id})::int`,
+      total: sql<number>`count(*) filter (where ${deliveries.status} <> 'skipped_low_balance')::int`,
       delivered: sql<number>`count(*) filter (where ${deliveries.status} = 'delivered')::int`,
       notDelivered: sql<number>`count(*) filter (where ${deliveries.status} = 'not_delivered')::int`,
+      skippedLowBalance: sql<number>`count(*) filter (where ${deliveries.status} = 'skipped_low_balance')::int`,
     })
     .from(deliveries)
-    .innerJoin(routes, eq(routes.id, deliveries.routeId))
-    .leftJoin(users, eq(users.id, routes.deliveryUserId))
-    .where(and(eq(deliveries.date, today), ne(deliveries.status, 'skipped_low_balance')))
-    .groupBy(routes.id, routes.name, users.name)
-    .orderBy(asc(routes.name));
-
-  const [skipped] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(deliveries)
-    .where(and(eq(deliveries.date, today), eq(deliveries.status, 'skipped_low_balance')));
+    .where(eq(deliveries.date, today));
 
   const namesById = await userNames(db, customerIds);
-  const lowBalanceCustomers = routedIds.flatMap((id) => {
+  const lowBalanceCustomers = withAddress.flatMap((id) => {
     const cost = planDay(nextOpen, inputs.get(id)!, products).totalPaise;
     const wallet = wallets.get(id)!;
     const shortfall = cost - wallet.availablePaise;
@@ -101,13 +90,9 @@ export async function getDashboard(db: Db, now: Date): Promise<AdminDashboard> {
     return [{ id, name: user.name, phone: user.phone, balancePaise: wallet.balancePaise, shortfallPaise: shortfall }];
   });
 
-  const unroutedCustomers = customerIds
-    .filter((id) => !addressByCustomer.get(id)?.routeId)
+  const noAddressCustomers = customerIds
+    .filter((id) => !addressByCustomer.has(id) && planDay(nextOpen, inputs.get(id)!, products).totalPaise > 0)
     .map((id) => ({ id, name: namesById.get(id)!.name }));
-
-  const unroutedWithOrders = unroutedCustomers.filter(
-    (c) => planDay(nextOpen, inputs.get(c.id)!, products).totalPaise > 0,
-  );
 
   return {
     tomorrow: {
@@ -118,9 +103,9 @@ export async function getDashboard(db: Db, now: Date): Promise<AdminDashboard> {
       totalPaise: delivering.reduce((sum, o) => sum + o.totalPaise, 0),
       skippedLowBalance: tomorrowOrders.orders.length - delivering.length,
     },
-    today: { date: today, routes: progressRows, skippedLowBalance: skipped?.count ?? 0 },
+    today: { date: today, ...progress },
     lowBalanceCustomers,
-    unroutedCustomers: unroutedWithOrders,
+    noAddressCustomers,
     pendingPayments: await listPaymentRequests(db, { status: 'pending' }),
   };
 }

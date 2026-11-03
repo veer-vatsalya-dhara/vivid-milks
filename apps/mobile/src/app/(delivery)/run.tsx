@@ -1,23 +1,19 @@
 import { formatAddress, NOT_DELIVERED_REASONS, type Drop, type NotDeliveredReason } from '@vivid-milks/shared';
 import { useState } from 'react';
-import { Linking, ScrollView } from 'react-native';
+import { Linking } from 'react-native';
 
 import { Icon } from '@/components/icon';
 import { Badge, Button, Card, Chip, QueryView, Row, Screen, SectionTitle, Text } from '@/components/ui';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
 import { formatDay, REASON_LABELS } from '@/lib/format';
-import { useApiMutation, useDeliveryRun, useRoutes } from '@/lib/queries';
-import { useSession } from '@/lib/session';
+import { useApiMutation, useDeliveryRun } from '@/lib/queries';
 
 export default function RunScreen() {
-  const { user } = useSession();
-  const [routeId, setRouteId] = useState<number | null>(null);
-  const run = useDeliveryRun(routeId);
+  const run = useDeliveryRun();
 
   return (
     <Screen onRefresh={() => run.refetch()} refreshing={run.isRefetching}>
-      {user?.role === 'admin' && <RouteFilter value={routeId} onChange={setRouteId} />}
       <QueryView query={run}>
         {(data) => {
           const done = data.drops.filter((d) => d.status !== 'pending').length;
@@ -39,7 +35,7 @@ export default function RunScreen() {
                 </Card>
               ) : data.drops.length === 0 ? (
                 <Card>
-                  <Text>No deliveries for you today.</Text>
+                  <Text>No deliveries today.</Text>
                 </Card>
               ) : (
                 <>
@@ -68,19 +64,6 @@ export default function RunScreen() {
   );
 }
 
-function RouteFilter({ value, onChange }: { value: number | null; onChange: (id: number | null) => void }) {
-  const routes = useRoutes();
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-      <Row>
-        <Chip label="All routes" selected={value === null} onPress={() => onChange(null)} />
-        {(routes.data ?? []).map((r) => (
-          <Chip key={r.id} label={r.name} selected={value === r.id} onPress={() => onChange(r.id)} />
-        ))}
-      </Row>
-    </ScrollView>
-  );
-}
 
 function DropCard({ drop, number }: { drop: Drop; number: number }) {
   const theme = useTheme();
