@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
+import { sql } from 'drizzle-orm';
+
 import { buildApp } from './app';
 import { authOptions, config } from './config';
 import { openDatabase } from './db/client';
@@ -10,6 +12,9 @@ import { openDatabase } from './db/client';
  */
 async function createApp() {
   const { db } = await openDatabase({ ...config, migrate: false });
+  // Connect now, while the app is still starting: a database paused after idling begins waking
+  // straight away instead of when the first query arrives. Errors surface on real queries.
+  db.execute(sql`select 1`).catch(() => {});
   const app = await buildApp({
     db,
     now: () => new Date(),

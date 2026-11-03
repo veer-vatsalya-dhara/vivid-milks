@@ -61,7 +61,15 @@ writeFileSync(
       version: 3,
       routes: [
         { src: '^/api(/.*)?$', dest: '/api' },
+        // Bundles, fonts and images have a content hash in their names, so browsers can keep them for a year.
+        {
+          src: '^/(_expo/static|assets)/.*$',
+          headers: { 'cache-control': 'public, max-age=31536000, immutable' },
+          continue: true,
+        },
         { handle: 'filesystem' },
+        // A missing hashed file is a real 404, not the app shell (which would then be cached for a year).
+        { src: '^/(_expo/static|assets)/.*$', status: 404 },
         // Single-page app: every other path loads the app shell.
         { src: '/(.*)', dest: '/index.html' },
       ],
