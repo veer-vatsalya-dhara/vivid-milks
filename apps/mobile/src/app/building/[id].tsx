@@ -29,7 +29,8 @@ export default function BuildingScreen() {
 
 function BuildingForm({ building }: { building: Building | null }) {
   const [name, setName] = useState(building?.name ?? '');
-  const [blocks, setBlocks] = useState(building?.blocks.join(', ') ?? '');
+  // Written as a plain null check: the React Compiler turned `building?.blocks.join()` into an unguarded `building.blocks`.
+  const [blocks, setBlocks] = useState(building ? building.blocks.join(', ') : '');
   const save = useApiMutation(
     (body: unknown) =>
       api(building ? `/admin/buildings/${building.id}` : '/admin/buildings', {
@@ -38,17 +39,8 @@ function BuildingForm({ building }: { building: Building | null }) {
       }),
     { onSuccess: () => closeScreen() },
   );
-  const remove = useApiMutation(() => api(`/admin/buildings/${building!.id}`, { method: 'DELETE' }), {
-    onSuccess: () => closeScreen(),
-  });
   const parsed = buildingInput.safeParse({ name, blocks: parseBlocks(blocks) });
   const error = parsed.success ? undefined : parsed.error.issues.find((i) => i.path[0] === 'blocks')?.message;
-
-  const confirmRemove = async () => {
-    if (await confirmAction(`Delete ${building!.name}?`, 'Customers will no longer see it in the list.', 'Delete')) {
-      remove.mutate(undefined);
-    }
-  };
 
   return (
     <>
@@ -79,16 +71,31 @@ function BuildingForm({ building }: { building: Building | null }) {
         loading={save.isPending}
         onPress={() => parsed.success && save.mutate(parsed.data)}
       />
-      {building && (
-        <Button
-          title="Delete building"
-          variant="danger"
-          loading={remove.isPending}
-          disabled={building.customerCount > 0}
-          onPress={() => void confirmRemove()}
-        />
-      )}
-      {building && building.customerCount > 0 && (
+      {building && <DeleteBuilding building={building} />}
+    </>
+  );
+}
+
+/** Its own component so `building` is never null here (the React Compiler mishandles `building!.id` in closures). */
+function DeleteBuilding({ building }: { building: Building }) {
+  const remove = useApiMutation(() => api(`/admin/buildings/${building.id}`, { method: 'DELETE' }), {
+    onSuccess: () => closeScreen(),
+  });
+  const confirmRemove = async () => {
+    if (await confirmAction(`Delete ${building.name}?`, 'Customers will no longer see it in the list.', 'Delete')) {
+      remove.mutate(undefined);
+    }
+  };
+  return (
+    <>
+      <Button
+        title="Delete building"
+        variant="danger"
+        loading={remove.isPending}
+        disabled={building.customerCount > 0}
+        onPress={() => void confirmRemove()}
+      />
+      {building.customerCount > 0 && (
         <Text type="caption" themeColor="textSecondary">
           A building can be deleted once nobody lives there.
         </Text>

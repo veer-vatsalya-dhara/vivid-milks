@@ -37,17 +37,6 @@ function ProductForm({ product }: { product: Product | null }) {
       api(product ? `/admin/products/${product.id}` : '/admin/products', { method: product ? 'PUT' : 'POST', body }),
     { onSuccess: () => closeScreen() },
   );
-  const remove = useApiMutation(() => api(`/admin/products/${product!.id}`, { method: 'DELETE' }), {
-    onSuccess: () => closeScreen(),
-  });
-  const confirmRemove = async () => {
-    const ok = await confirmAction(
-      `Delete ${product!.name} ${product!.unitLabel}?`,
-      'It disappears from the shop, and customers’ subscriptions and upcoming orders for it are removed. Past orders keep it.',
-      'Delete',
-    );
-    if (ok) remove.mutate(undefined);
-  };
   const parsed = productInput.safeParse({ name, unitLabel, pricePaise: Math.round(Number(price) * 100), active });
 
   return (
@@ -68,9 +57,23 @@ function ProductForm({ product }: { product: Product | null }) {
         loading={save.isPending}
         onPress={() => parsed.success && save.mutate(parsed.data)}
       />
-      {product && (
-        <Button title="Delete product" variant="danger" loading={remove.isPending} onPress={() => void confirmRemove()} />
-      )}
+      {product && <DeleteProduct product={product} />}
     </>
   );
+}
+
+/** Its own component so `product` is never null here (the React Compiler mishandles `product!.id` in closures). */
+function DeleteProduct({ product }: { product: Product }) {
+  const remove = useApiMutation(() => api(`/admin/products/${product.id}`, { method: 'DELETE' }), {
+    onSuccess: () => closeScreen(),
+  });
+  const confirmRemove = async () => {
+    const ok = await confirmAction(
+      `Delete ${product.name} ${product.unitLabel}?`,
+      'It disappears from the shop, and customers’ subscriptions and upcoming orders for it are removed. Past orders keep it.',
+      'Delete',
+    );
+    if (ok) remove.mutate(undefined);
+  };
+  return <Button title="Delete product" variant="danger" loading={remove.isPending} onPress={() => void confirmRemove()} />;
 }
