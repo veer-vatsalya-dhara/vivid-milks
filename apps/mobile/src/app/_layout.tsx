@@ -56,6 +56,7 @@ function RootNavigator() {
         <Stack.Screen name="route/[id]" options={{ title: 'Route', presentation: 'modal' }} />
         <Stack.Screen name="product/[id]" options={{ title: 'Product', presentation: 'modal' }} />
         <Stack.Screen name="person/[id]" options={{ title: 'Person', presentation: 'modal' }} />
+        <Stack.Screen name="building/[id]" options={{ title: 'Building', presentation: 'modal' }} />
       </Stack.Protected>
 
       <Stack.Protected guard={!!user}>

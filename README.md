@@ -41,9 +41,12 @@ To start over with fresh sample data, stop the server and delete `apps/server/.d
 ## How orders work
 
 - A customer's order for a day = their usual daily quantities, replaced by any change they made for that day, or zero while paused.
-- Orders can be changed until the **cutoff** (admin setting, default 10:00 PM the evening before).
+- Orders can be changed until the **cutoff** (admin setting, default 6:00 PM the evening before).
+- Subscription changes made after the cutoff start the day after tomorrow: tomorrow is locked first, so it keeps the old quantities.
 - At the cutoff the server **locks** the next day: each routed customer with an order gets a delivery if their wallet covers it, or is marked *skipped: low balance* otherwise.
-- The wallet is charged when the delivery person marks a drop **Delivered**. Admins add money after receiving cash or UPI.
+- The wallet is charged when the delivery person marks a drop **Delivered**. Customers pay by UPI (the QR uploaded under **Settings**) or cash and tap **I have paid**; an admin approves it on the dashboard and the money is added to their wallet. Admins can also add money directly on a customer's page.
+- Customers pick their **building / society** and **block** from a list admins manage under **Settings**, then enter their floor and flat number.
+- The dashboard's **Download delivery list (Excel)** gives tomorrow's deliveries sorted by building (Z→A), block, then floor (top first), with product totals and a sheet of customers skipped for low balance.
 
 ## Checks
 

@@ -1,4 +1,11 @@
-import { DELIVERY_STATUSES, NOT_DELIVERED_REASONS, ROLES, WALLET_TXN_TYPES } from '@vivid-milks/shared';
+import {
+  DELIVERY_STATUSES,
+  NOT_DELIVERED_REASONS,
+  PAYMENT_METHODS,
+  PAYMENT_REQUEST_STATUSES,
+  ROLES,
+  WALLET_TXN_TYPES,
+} from '@vivid-milks/shared';
 import {
   boolean,
   date,
@@ -17,6 +24,8 @@ export const roleEnum = pgEnum('role', ROLES);
 export const deliveryStatusEnum = pgEnum('delivery_status', DELIVERY_STATUSES);
 export const notDeliveredReasonEnum = pgEnum('not_delivered_reason', NOT_DELIVERED_REASONS);
 export const walletTxnTypeEnum = pgEnum('wallet_txn_type', WALLET_TXN_TYPES);
+export const paymentMethodEnum = pgEnum('payment_method', PAYMENT_METHODS);
+export const paymentRequestStatusEnum = pgEnum('payment_request_status', PAYMENT_REQUEST_STATUSES);
 
 const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull().defaultNow();
 
@@ -41,14 +50,29 @@ export const routes = pgTable('routes', {
   createdAt: createdAt(),
 });
 
+/** Buildings and societies customers pick from. Admins manage the list. */
+export const buildings = pgTable('buildings', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull().unique(),
+  /** Blocks / towers, e.g. ["A", "B", "C"]. Empty when the building has none. */
+  blocks: text('blocks').array().notNull().default([]),
+  createdAt: createdAt(),
+});
+
 /** One delivery address per customer in the MVP. */
 export const addresses = pgTable('addresses', {
   userId: integer('user_id')
     .primaryKey()
     .references(() => users.id, { onDelete: 'cascade' }),
+  buildingId: integer('building_id').references(() => buildings.id),
+  block: text('block').notNull().default(''),
+  /** 0 is the ground floor. */
+  floor: integer('floor'),
+  /** House / flat number. */
   line1: text('line1').notNull(),
+  /** Free-text building name from before buildings were a list. */
   line2: text('line2').notNull().default(''),
-  area: text('area').notNull(),
+  area: text('area').notNull().default(''),
   landmark: text('landmark').notNull().default(''),
   routeId: integer('route_id').references(() => routes.id, { onDelete: 'set null' }),
   routePosition: integer('route_position'),
@@ -60,6 +84,8 @@ export const products = pgTable('products', {
   unitLabel: text('unit_label').notNull(),
   pricePaise: integer('price_paise').notNull(),
   active: boolean('active').notNull().default(true),
+  /** Deleted products are kept for order history but no longer listed anywhere. */
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -170,6 +196,26 @@ export const walletTxns = pgTable(
     createdAt: createdAt(),
   },
   (t) => [index().on(t.customerId)],
+);
+
+/** A customer's "I have paid" for an admin to approve. Approval adds the money to the wallet. */
+export const paymentRequests = pgTable(
+  'payment_requests',
+  {
+    id: serial('id').primaryKey(),
+    customerId: integer('customer_id')
+      .notNull()
+      .references(() => users.id),
+    amountPaise: integer('amount_paise').notNull(),
+    method: paymentMethodEnum('method').notNull(),
+    reference: text('reference').notNull().default(''),
+    status: paymentRequestStatusEnum('status').notNull().default('pending'),
+    decidedBy: integer('decided_by').references(() => users.id),
+    decidedAt: timestamp('decided_at', { withTimezone: true }),
+    walletTxnId: integer('wallet_txn_id').references(() => walletTxns.id),
+    createdAt: createdAt(),
+  },
+  (t) => [index().on(t.status), index().on(t.customerId)],
 );
 
 export const settings = pgTable('settings', {

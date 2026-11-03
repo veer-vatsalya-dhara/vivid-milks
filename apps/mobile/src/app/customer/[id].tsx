@@ -1,4 +1,4 @@
-import type { CustomerDetail } from '@vivid-milks/shared';
+import { formatAddress, type CustomerDetail } from '@vivid-milks/shared';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Linking } from 'react-native';
@@ -51,11 +51,7 @@ function Details({ customer: { user, address } }: { customer: CustomerDetail }) 
         </Row>
       )}
       <Text type="small" themeColor="textSecondary">
-        {address
-          ? [address.line1, address.line2, address.area, address.landmark]
-              .filter(Boolean)
-              .join(', ')
-          : 'No address yet'}
+        {address ? formatAddress(address) : 'No address yet'}
       </Text>
     </Card>
   );

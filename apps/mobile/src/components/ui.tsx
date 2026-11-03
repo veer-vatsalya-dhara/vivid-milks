@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -352,6 +353,94 @@ export function Field({ label, error, ...input }: TextInputProps & { label: stri
   );
 }
 
+/** A field that opens a list to pick one option from. */
+export function Select<T extends string | number>({
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = 'Choose…',
+  error,
+  emptyText = 'Nothing to choose from yet.',
+}: {
+  label: string;
+  value: T | null;
+  options: { value: T; label: string }[];
+  onChange: (value: T) => void;
+  placeholder?: string;
+  error?: string;
+  emptyText?: string;
+}) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <View style={styles.field}>
+      <ThemedText type="smallBold">{label}</ThemedText>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${selected?.label ?? placeholder}`}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [
+          styles.input,
+          styles.select,
+          { backgroundColor: theme.backgroundElement, borderColor: error ? theme.danger : theme.border },
+          pressed && styles.pressed,
+        ]}>
+        <ThemedText style={styles.flex} themeColor={selected ? 'text' : 'textSecondary'} numberOfLines={1}>
+          {selected?.label ?? placeholder}
+        </ThemedText>
+        <ThemedText themeColor="textSecondary">▾</ThemedText>
+      </Pressable>
+      {error ? (
+        <ThemedText type="caption" themeColor="danger">
+          {error}
+        </ThemedText>
+      ) : null}
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
+          <Pressable style={[styles.sheet, { backgroundColor: theme.backgroundElement }]} onPress={() => {}}>
+            <ThemedText type="subtitle" style={{ padding: Spacing.three, paddingBottom: Spacing.two }}>
+              {label}
+            </ThemedText>
+            <ScrollView style={{ maxHeight: 420 }}>
+              {options.length === 0 && (
+                <ThemedText themeColor="textSecondary" style={{ padding: Spacing.three }}>
+                  {emptyText}
+                </ThemedText>
+              )}
+              {options.map((option) => {
+                const isSelected = option.value === value;
+                return (
+                  <Pressable
+                    key={String(option.value)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => {
+                      onChange(option.value);
+                      setOpen(false);
+                    }}
+                    style={({ pressed }) => [
+                      styles.option,
+                      { borderTopColor: theme.border },
+                      isSelected && { backgroundColor: theme.backgroundSelected },
+                      pressed && styles.pressed,
+                    ]}>
+                    <ThemedText type={isSelected ? 'smallBold' : 'default'} themeColor={isSelected ? 'primary' : 'text'}>
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <Button title="Cancel" variant="ghost" onPress={() => setOpen(false)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 export function Loading() {
   return (
     <View style={styles.centered}>
@@ -447,6 +536,17 @@ export const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: Fonts.regular,
   },
+  select: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', padding: Spacing.four },
+  sheet: {
+    borderRadius: Radius.large,
+    overflow: 'hidden',
+    width: '100%',
+    maxWidth: 480,
+    alignSelf: 'center',
+    paddingBottom: Spacing.two,
+  },
+  option: { paddingHorizontal: Spacing.three, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: Spacing.four, gap: Spacing.three },
   centerText: { textAlign: 'center' },
   divider: { height: StyleSheet.hairlineWidth },

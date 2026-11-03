@@ -8,18 +8,32 @@ import {
   type Day,
   type IsoDate,
   type Me,
+  type OrderHistoryEntry,
   type Pause,
   type PauseInput,
   type profileInput,
   type Subscription,
 } from '@vivid-milks/shared';
 import type { z } from 'zod';
-import { and, asc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from 'drizzle-orm';
 
 import type { Db } from '../db/client';
-import { addresses, dayOverrides, deliveries, deliveryItems, pauses, routes, subscriptions, users } from '../db/schema';
+import {
+  addresses,
+  buildings,
+  dayOverrides,
+  deliveries,
+  deliveryItems,
+  pauses,
+  products,
+  routes,
+  subscriptions,
+  users,
+} from '../db/schema';
 import { badRequest, conflict, notFound } from '../errors';
 import { loadLockedDates, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
+import { toAddress, validateAddressBuilding } from './buildings';
+import { lockDueDates } from './locking';
 import { baselineQty, planDay } from './planner';
 import { getSettings } from './settings';
 
@@ -27,9 +41,10 @@ const MAX_SCHEDULE_DAYS = 62;
 
 export async function getMe(db: Db, userId: number): Promise<Me> {
   const [row] = await db
-    .select({ user: users, address: addresses, routeName: routes.name })
+    .select({ user: users, address: addresses, buildingName: buildings.name, routeName: routes.name })
     .from(users)
     .leftJoin(addresses, eq(addresses.userId, users.id))
+    .leftJoin(buildings, eq(buildings.id, addresses.buildingId))
     .leftJoin(routes, eq(routes.id, addresses.routeId))
     .where(eq(users.id, userId));
   if (!row) throw notFound('User');
@@ -40,18 +55,21 @@ export async function getMe(db: Db, userId: number): Promise<Me> {
     email: user.email,
     phone: user.phone,
     role: user.role,
-    address: address && { line1: address.line1, line2: address.line2, area: address.area, landmark: address.landmark },
+    address: address && toAddress(address, row.buildingName),
     routeName: row.routeName,
   };
 }
 
 export async function updateProfile(db: Db, userId: number, input: z.output<typeof profileInput>): Promise<Me> {
+  const block = await validateAddressBuilding(db, input.address.buildingId, input.address.block);
+  // The old free-text building name is replaced by the chosen building.
+  const address = { ...input.address, block, line2: '' };
   await db.transaction(async (tx) => {
     await tx.update(users).set({ name: input.name, phone: input.phone }).where(eq(users.id, userId));
     await tx
       .insert(addresses)
-      .values({ userId, ...input.address })
-      .onConflictDoUpdate({ target: addresses.userId, set: input.address });
+      .values({ userId, ...address })
+      .onConflictDoUpdate({ target: addresses.userId, set: address });
   });
   return getMe(db, userId);
 }
@@ -158,14 +176,20 @@ export async function getSubscriptions(db: Db, customerId: number): Promise<Subs
     .orderBy(asc(subscriptions.productId));
 }
 
+/**
+ * Subscription changes apply from the first day that can still be changed. Past the cutoff,
+ * tomorrow's orders are locked first, so a change made at 7 PM starts the day after tomorrow.
+ */
 export async function setSubscription(
   db: Db,
   customerId: number,
   productId: number,
   defaultQty: number,
+  now: Date,
 ): Promise<Subscription[]> {
   const product = (await loadProducts(db)).get(productId);
   if (!product?.active) throw notFound('Product');
+  await lockDueDates(db, now);
   await db
     .insert(subscriptions)
     .values({ customerId, productId, defaultQty })
@@ -173,11 +197,57 @@ export async function setSubscription(
   return getSubscriptions(db, customerId);
 }
 
-export async function removeSubscription(db: Db, customerId: number, productId: number): Promise<Subscription[]> {
+export async function removeSubscription(
+  db: Db,
+  customerId: number,
+  productId: number,
+  now: Date,
+): Promise<Subscription[]> {
+  await lockDueDates(db, now);
   await db
     .delete(subscriptions)
     .where(and(eq(subscriptions.customerId, customerId), eq(subscriptions.productId, productId)));
   return getSubscriptions(db, customerId);
+}
+
+const ORDER_HISTORY_LIMIT = 90;
+
+/** Deliveries up to and including the next confirmed day, newest first. */
+export async function getOrderHistory(db: Db, customerId: number): Promise<OrderHistoryEntry[]> {
+  const rows = await db
+    .select()
+    .from(deliveries)
+    .where(eq(deliveries.customerId, customerId))
+    .orderBy(desc(deliveries.date))
+    .limit(ORDER_HISTORY_LIMIT);
+  if (rows.length === 0) return [];
+  const items = await db
+    .select({
+      deliveryId: deliveryItems.deliveryId,
+      productId: deliveryItems.productId,
+      qty: deliveryItems.qty,
+      unitPricePaise: deliveryItems.unitPricePaise,
+      name: products.name,
+      unitLabel: products.unitLabel,
+    })
+    .from(deliveryItems)
+    .innerJoin(products, eq(products.id, deliveryItems.productId))
+    .where(
+      inArray(
+        deliveryItems.deliveryId,
+        rows.map((r) => r.id),
+      ),
+    )
+    .orderBy(asc(deliveryItems.productId));
+  return rows.map((d) => ({
+    date: d.date,
+    status: d.status,
+    reason: d.reason,
+    totalPaise: d.totalPaise,
+    items: items
+      .filter((i) => i.deliveryId === d.id)
+      .map(({ productId, name, unitLabel, qty, unitPricePaise }) => ({ productId, name, unitLabel, qty, unitPricePaise })),
+  }));
 }
 
 /** The pause covering today or the nearest future pause. */

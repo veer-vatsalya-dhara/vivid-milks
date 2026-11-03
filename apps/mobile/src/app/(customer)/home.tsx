@@ -1,4 +1,4 @@
-import { type CustomerHome, type Day, type Product, type Subscription } from '@vivid-milks/shared';
+import { formatAddress, type CustomerHome, type Day, type Product, type Subscription } from '@vivid-milks/shared';
 import { router } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -68,7 +68,7 @@ function Hero({ home, topInset }: { home: CustomerHome; topInset: number }) {
               Delivering to
             </Text>
             <Text type="smallBold" numberOfLines={1} style={{ color: theme.onPrimary }}>
-              {address ? [address.line1, address.area].filter(Boolean).join(', ') : 'Add your address'}
+              {address ? formatAddress(address) : 'Add your address'}
             </Text>
           </View>
           <WalletPill paise={home.wallet.balancePaise} onPress={() => router.push('/wallet')} />

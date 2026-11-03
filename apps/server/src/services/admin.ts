@@ -22,6 +22,7 @@ import type { Db } from '../db/client';
 import { toUser } from '../auth';
 import {
   addresses,
+  buildings,
   dayOverrides,
   deliveries,
   deliveryItems,
@@ -32,8 +33,11 @@ import {
   users,
 } from '../db/schema';
 import { badRequest, conflict, notFound } from '../errors';
-import { customersWithOrders, loadLockedDates, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
+import { toAddress } from './buildings';
+import { customersWithOrders, loadPlanInputs, loadProducts, loadWalletSummaries } from './data';
 import { getSubscriptions } from './customer';
+import { deliverable, getDayOrders } from './day-orders';
+import { listPaymentRequests } from './payments';
 import { sumLineItems } from './deliveries';
 import { planDay } from './planner';
 import { getSettings } from './settings';
@@ -50,36 +54,21 @@ export async function getDashboard(db: Db, now: Date): Promise<AdminDashboard> {
   const tomorrow = addDays(today, 1);
   const { orderCutoffTime } = await getSettings(db);
   const nextOpen = firstEditableDate(orderCutoffTime, now);
-  const [products, lockedDates] = await Promise.all([loadProducts(db), loadLockedDates(db, tomorrow, tomorrow)]);
-  const tomorrowLocked = lockedDates.has(tomorrow);
+  const [products, tomorrowOrders] = await Promise.all([loadProducts(db), getDayOrders(db, tomorrow, now)]);
 
-  // Projected orders for routed customers, for tomorrow (if still open) and the next open date.
-  const customerIds = await customersWithOrders(db, tomorrow, nextOpen);
+  const delivering = deliverable(tomorrowOrders.orders);
+  const tomorrowTotals = sumLineItems(
+    delivering.flatMap((o) => o.items.map((i) => toLineItem(products, i.productId, i.qty))),
+  );
+
+  // Customers who would be skipped or left out on the next date that can still change, so admins can follow up.
+  const customerIds = await customersWithOrders(db, nextOpen, nextOpen);
   const [inputs, addressByCustomer, wallets] = await Promise.all([
-    loadPlanInputs(db, customerIds, tomorrow, nextOpen),
+    loadPlanInputs(db, customerIds, nextOpen, nextOpen),
     routedAddresses(db, customerIds),
     loadWalletSummaries(db, customerIds, today),
   ]);
   const routedIds = customerIds.filter((id) => addressByCustomer.get(id)?.routeId);
-
-  let tomorrowTotals: LineItem[];
-  if (tomorrowLocked) {
-    const rows = await db
-      .select({ productId: deliveryItems.productId, qty: sql<number>`sum(${deliveryItems.qty})::int` })
-      .from(deliveryItems)
-      .innerJoin(deliveries, eq(deliveries.id, deliveryItems.deliveryId))
-      .where(and(eq(deliveries.date, tomorrow), ne(deliveries.status, 'skipped_low_balance')))
-      .groupBy(deliveryItems.productId);
-    tomorrowTotals = rows.map((r) => toLineItem(products, r.productId, r.qty));
-  } else {
-    tomorrowTotals = sumLineItems(
-      routedIds.flatMap((id) =>
-        planDay(tomorrow, inputs.get(id)!, products)
-          .items.filter((i) => i.qty > 0)
-          .map((i) => toLineItem(products, i.productId, i.qty)),
-      ),
-    );
-  }
 
   const progressRows = await db
     .select({
@@ -116,11 +105,23 @@ export async function getDashboard(db: Db, now: Date): Promise<AdminDashboard> {
     .filter((id) => !addressByCustomer.get(id)?.routeId)
     .map((id) => ({ id, name: namesById.get(id)!.name }));
 
+  const unroutedWithOrders = unroutedCustomers.filter(
+    (c) => planDay(nextOpen, inputs.get(c.id)!, products).totalPaise > 0,
+  );
+
   return {
-    tomorrow: { date: tomorrow, locked: tomorrowLocked, totals: tomorrowTotals },
+    tomorrow: {
+      date: tomorrow,
+      locked: tomorrowOrders.locked,
+      totals: tomorrowTotals,
+      customerCount: delivering.length,
+      totalPaise: delivering.reduce((sum, o) => sum + o.totalPaise, 0),
+      skippedLowBalance: tomorrowOrders.orders.length - delivering.length,
+    },
     today: { date: today, routes: progressRows, skippedLowBalance: skipped?.count ?? 0 },
     lowBalanceCustomers,
-    unroutedCustomers,
+    unroutedCustomers: unroutedWithOrders,
+    pendingPayments: await listPaymentRequests(db, { status: 'pending' }),
   };
 }
 
@@ -146,15 +147,27 @@ async function userNames(db: Db, ids: number[]) {
 export async function listCustomers(db: Db, query: string, now: Date): Promise<CustomerSummary[]> {
   const q = query.trim();
   const rows = await db
-    .select({ user: users, area: addresses.area, routeName: routes.name })
+    .select({
+      user: users,
+      area: sql<string | null>`coalesce(${buildings.name}, nullif(${addresses.area}, ''))`,
+      routeName: routes.name,
+    })
     .from(users)
     .leftJoin(addresses, eq(addresses.userId, users.id))
+    .leftJoin(buildings, eq(buildings.id, addresses.buildingId))
     .leftJoin(routes, eq(routes.id, addresses.routeId))
     .where(
       and(
         ne(users.role, 'delivery'),
         isNull(users.removedAt),
-        q ? or(ilike(users.name, `%${q}%`), ilike(users.phone, `%${q}%`), ilike(addresses.area, `%${q}%`)) : undefined,
+        q
+          ? or(
+              ilike(users.name, `%${q}%`),
+              ilike(users.phone, `%${q}%`),
+              ilike(addresses.area, `%${q}%`),
+              ilike(buildings.name, `%${q}%`),
+            )
+          : undefined,
       ),
     )
     .orderBy(asc(users.name))
@@ -177,15 +190,16 @@ export async function listCustomers(db: Db, query: string, now: Date): Promise<C
 
 export async function getCustomerDetail(db: Db, customerId: number, now: Date): Promise<CustomerDetail> {
   const [row] = await db
-    .select({ user: users, address: addresses })
+    .select({ user: users, address: addresses, buildingName: buildings.name })
     .from(users)
     .leftJoin(addresses, eq(addresses.userId, users.id))
+    .leftJoin(buildings, eq(buildings.id, addresses.buildingId))
     .where(eq(users.id, customerId));
   if (!row) throw notFound('Customer');
   const { user, address } = row;
   return {
     user: toUser(user),
-    address: address && { line1: address.line1, line2: address.line2, area: address.area, landmark: address.landmark },
+    address: address && toAddress(address, row.buildingName),
     routeId: address?.routeId ?? null,
     routePosition: address?.routePosition ?? null,
     subscriptions: await getSubscriptions(db, customerId),
@@ -359,8 +373,10 @@ export async function updateRoute(db: Db, routeId: number, input: RouteInput): P
 // Products
 // ---------------------------------------------------------------------------
 
+/** Products that haven't been deleted. */
 export async function listAllProducts(db: Db): Promise<Product[]> {
-  return [...(await loadProducts(db)).values()];
+  const rows = await db.select().from(products).where(isNull(products.deletedAt)).orderBy(asc(products.id));
+  return rows.map((p) => ({ id: p.id, name: p.name, unitLabel: p.unitLabel, pricePaise: p.pricePaise, active: p.active }));
 }
 
 export async function createProduct(db: Db, input: ProductInput): Promise<Product[]> {
@@ -369,7 +385,31 @@ export async function createProduct(db: Db, input: ProductInput): Promise<Produc
 }
 
 export async function updateProduct(db: Db, productId: number, input: ProductInput): Promise<Product[]> {
-  const updated = await db.update(products).set(input).where(eq(products.id, productId)).returning();
+  const updated = await db
+    .update(products)
+    .set(input)
+    .where(and(eq(products.id, productId), isNull(products.deletedAt)))
+    .returning();
   if (updated.length === 0) throw notFound('Product');
+  return listAllProducts(db);
+}
+
+/**
+ * Deletes a product: it disappears from the shop and admin lists, and subscriptions and
+ * upcoming day changes for it are removed. Deliveries already locked or made keep it, so
+ * order history and wallet records stay intact.
+ */
+export async function deleteProduct(db: Db, productId: number, now: Date): Promise<Product[]> {
+  const today = todayInIst(now);
+  await db.transaction(async (tx) => {
+    const deleted = await tx
+      .update(products)
+      .set({ deletedAt: now, active: false })
+      .where(and(eq(products.id, productId), isNull(products.deletedAt)))
+      .returning();
+    if (deleted.length === 0) throw notFound('Product');
+    await tx.delete(subscriptions).where(eq(subscriptions.productId, productId));
+    await tx.delete(dayOverrides).where(and(eq(dayOverrides.productId, productId), gte(dayOverrides.date, today)));
+  });
   return listAllProducts(db);
 }

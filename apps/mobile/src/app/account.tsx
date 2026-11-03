@@ -52,8 +52,7 @@ export default function AccountScreen() {
         </>
       )}
 
-      <SectionTitle>Sign out</SectionTitle>
-      <Button title="Switch user" variant="danger" onPress={signOut} />
+      <Button title="Sign out" variant="danger" onPress={signOut} />
     </Screen>
   );
 }

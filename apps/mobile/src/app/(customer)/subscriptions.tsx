@@ -1,3 +1,4 @@
+import { firstEditableDate } from '@vivid-milks/shared';
 import { router } from 'expo-router';
 import { View } from 'react-native';
 
@@ -7,14 +8,16 @@ import { Button, Card, Divider, Row, Screen, Stepper, Text } from '@/components/
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { api } from '@/lib/api';
-import { formatDay } from '@/lib/format';
-import { useApiMutation, usePause, useProducts, useSubscriptions } from '@/lib/queries';
+import { formatDay, formatRelativeDay, formatTimeOfDay } from '@/lib/format';
+import { useApiMutation, usePause, useProducts, useSettings, useSubscriptions } from '@/lib/queries';
 
 export default function SubscriptionsScreen() {
   const theme = useTheme();
   const subscriptions = useSubscriptions();
   const products = useProducts();
   const pause = usePause();
+  const settings = useSettings();
+  const startsOn = settings.data && firstEditableDate(settings.data.orderCutoffTime);
 
   const setQty = useApiMutation(({ productId, defaultQty }: { productId: number; defaultQty: number }) =>
     api(`/me/subscriptions/${productId}`, { method: 'PUT', body: { defaultQty } }),
@@ -33,6 +36,18 @@ export default function SubscriptionsScreen() {
       <Text type="small" themeColor="textSecondary">
         Delivered every morning. To change just one day, use My Basket.
       </Text>
+      {startsOn && settings.data && (
+        <Card tone="info">
+          <Text type="small">
+            Changes you make now start from{' '}
+            <Text type="smallBold">
+              {formatRelativeDay(startsOn) === 'Tomorrow' ? 'tomorrow' : formatRelativeDay(startsOn)} ({formatDay(startsOn)})
+            </Text>
+            . Changes after {formatTimeOfDay(settings.data.orderCutoffTime)} apply from the day
+            after tomorrow.
+          </Text>
+        </Card>
+      )}
 
       {subs.length === 0 ? (
         <Card>

@@ -11,8 +11,9 @@ import type { z } from 'zod';
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
 
 import type { Db } from '../db/client';
-import { addresses, deliveries, deliveryItems, products, routes, users, walletTxns } from '../db/schema';
+import { addresses, buildings, deliveries, deliveryItems, products, routes, users, walletTxns } from '../db/schema';
 import { badRequest, conflict, forbidden, notFound } from '../errors';
+import { toAddress } from './buildings';
 import { loadLockedDates } from './data';
 
 /** Adds up quantities per product, in product order. */
@@ -38,10 +39,17 @@ export async function getDeliveryRun(
   if (routeId !== null) conditions.push(eq(deliveries.routeId, routeId));
 
   const rows = await db
-    .select({ delivery: deliveries, customer: users, address: addresses, routeName: routes.name })
+    .select({
+      delivery: deliveries,
+      customer: users,
+      address: addresses,
+      buildingName: buildings.name,
+      routeName: routes.name,
+    })
     .from(deliveries)
     .innerJoin(users, eq(users.id, deliveries.customerId))
     .leftJoin(addresses, eq(addresses.userId, deliveries.customerId))
+    .leftJoin(buildings, eq(buildings.id, addresses.buildingId))
     .leftJoin(routes, eq(routes.id, deliveries.routeId))
     .where(and(...conditions))
     .orderBy(asc(routes.name), sql`${deliveries.routePosition} asc nulls last`, asc(users.name));
@@ -66,11 +74,11 @@ export async function getDeliveryRun(
         .orderBy(asc(deliveryItems.productId))
     : [];
 
-  const drops: Drop[] = rows.map(({ delivery, customer, address, routeName }) => ({
+  const drops: Drop[] = rows.map(({ delivery, customer, address, buildingName, routeName }) => ({
     id: delivery.id,
     customerName: customer.name,
     phone: customer.phone,
-    address: address && { line1: address.line1, line2: address.line2, area: address.area, landmark: address.landmark },
+    address: address && toAddress(address, buildingName),
     routeName,
     routePosition: delivery.routePosition,
     items: itemRows

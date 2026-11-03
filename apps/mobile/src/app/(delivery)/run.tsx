@@ -1,4 +1,4 @@
-import { NOT_DELIVERED_REASONS, type Drop, type NotDeliveredReason } from '@vivid-milks/shared';
+import { formatAddress, NOT_DELIVERED_REASONS, type Drop, type NotDeliveredReason } from '@vivid-milks/shared';
 import { useState } from 'react';
 import { Linking, ScrollView } from 'react-native';
 
@@ -104,7 +104,7 @@ function DropCard({ drop, number }: { drop: Drop; number: number }) {
       </Row>
       {address && (
         <Text type="small">
-          {[address.line1, address.line2, address.area].filter(Boolean).join(', ')}
+          {formatAddress({ ...address, landmark: '' })}
           {address.landmark ? `\n${address.landmark}` : ''}
         </Text>
       )}

@@ -4,7 +4,7 @@ import type { Db } from '../db/client';
 import { settings } from '../db/schema';
 
 const DEFAULTS: AppSettings = {
-  orderCutoffTime: '22:00',
+  orderCutoffTime: '18:00',
   deliveryTime: '07:00',
 };
 

@@ -1,13 +1,17 @@
 import type {
   AdminDashboard,
   AppSettings,
+  Building,
   CustomerDetail,
   CustomerHome,
   CustomerSummary,
   DeliveryRun,
   IsoDate,
   Me,
+  OrderHistoryEntry,
   Pause,
+  PaymentQr,
+  PaymentRequest,
   Product,
   Route,
   Schedule,
@@ -26,6 +30,13 @@ export const useHome = () => useQuery({ queryKey: ['home'], queryFn: get<Custome
 export const useMe = () => useQuery({ queryKey: ['me'], queryFn: get<Me>('/me') });
 export const useProducts = () => useQuery({ queryKey: ['products'], queryFn: get<Product[]>('/products') });
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: get<AppSettings>('/settings') });
+export const useBuildings = () => useQuery({ queryKey: ['buildings'], queryFn: get<Building[]>('/buildings') });
+export const usePaymentQr = () =>
+  useQuery({ queryKey: ['payment-qr'], queryFn: get<PaymentQr>('/payment-qr'), staleTime: 5 * 60_000 });
+export const useMyPaymentRequests = () =>
+  useQuery({ queryKey: ['my-payment-requests'], queryFn: get<PaymentRequest[]>('/me/payment-requests') });
+export const useOrderHistory = () =>
+  useQuery({ queryKey: ['orders'], queryFn: get<OrderHistoryEntry[]>('/me/orders') });
 export const useSubscriptions = () =>
   useQuery({ queryKey: ['subscriptions'], queryFn: get<Subscription[]>('/me/subscriptions') });
 export const usePause = () => useQuery({ queryKey: ['pause'], queryFn: get<{ pause: Pause | null }>('/me/pause') });

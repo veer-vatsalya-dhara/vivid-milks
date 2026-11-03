@@ -69,7 +69,7 @@ describe('customer orders', () => {
     const { body } = await call<CustomerHome>(ASHA, 'GET', '/api/me/home');
     expect(body.nextDay).toMatchObject({ date: '2026-11-02', editable: true, status: 'planned', totalPaise: 6800 });
     expect(body.shortfallPaise).toBeNull();
-    expect(body.settings).toEqual({ orderCutoffTime: '22:00', deliveryTime: '07:00' });
+    expect(body.settings).toEqual({ orderCutoffTime: '18:00', deliveryTime: '07:00' });
   });
 
   it('changes one day and changes it back', async () => {
@@ -82,7 +82,7 @@ describe('customer orders', () => {
 
   it('refuses changes after the cutoff', async () => {
     expect((await call(ASHA, 'PUT', `/api/me/schedule/2026-11-01/${COW_500}`, { qty: 0 })).status).toBe(409);
-    clock = ist('2026-11-01', '22:00');
+    clock = ist('2026-11-01', '18:00');
     expect((await call(ASHA, 'PUT', `/api/me/schedule/2026-11-02/${COW_500}`, { qty: 0 })).status).toBe(409);
     expect((await call(ASHA, 'PUT', `/api/me/schedule/2026-11-03/${COW_500}`, { qty: 0 })).status).toBe(200);
   });
@@ -109,7 +109,7 @@ describe('customer orders', () => {
 
 describe('locking and delivery', () => {
   async function lockNov2() {
-    clock = ist('2026-11-01', '22:00');
+    clock = ist('2026-11-01', '18:00');
     return call<LockResult>(ADMIN, 'POST', '/api/admin/lock', { date: '2026-11-02' });
   }
 
@@ -162,16 +162,16 @@ describe('locking and delivery', () => {
   });
 
   it('locks due dates on schedule', async () => {
-    clock = ist('2026-11-01', '21:59');
+    clock = ist('2026-11-01', '17:59');
     expect((await lockDueDates(database.db, clock)).map((r) => r.date)).toEqual(['2026-11-01']);
-    clock = ist('2026-11-01', '22:00');
+    clock = ist('2026-11-01', '18:00');
     expect((await lockDueDates(database.db, clock)).map((r) => r.date)).toEqual(['2026-11-02']);
     expect(await lockDueDates(database.db, clock)).toEqual([]);
   });
 
   it('locks due dates when requests arrive, for serverless hosting', async () => {
     const lazy = await buildApp({ db: database.db, now: () => clock, devAuth: true, lockOnRequest: true });
-    clock = ist('2026-11-01', '22:05');
+    clock = ist('2026-11-01', '18:05');
     await lazy.inject({ method: 'GET', url: '/api/me', headers: { 'x-user-id': String(RAVI) } });
     const { body } = await call<LockResult>(ADMIN, 'POST', '/api/admin/lock', { date: '2026-11-02' });
     expect(body.alreadyLocked).toBe(true);

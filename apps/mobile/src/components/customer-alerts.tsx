@@ -20,6 +20,12 @@ export function CustomerAlerts({ home }: { home: CustomerHome }) {
           <Text type="small">We need your address and mobile number before we can deliver.</Text>
           <Button title="Add address" onPress={() => router.push('/account')} small />
         </Card>
+      ) : !me.address.buildingId ? (
+        <Card tone="warning">
+          <Text type="smallBold">Update your address</Text>
+          <Text type="small">Please choose your building, block and floor so we can find your door quickly.</Text>
+          <Button title="Update address" onPress={() => router.push('/account')} small />
+        </Card>
       ) : !me.routeName ? (
         <Card tone="info">
           <Text type="smallBold">Almost there</Text>

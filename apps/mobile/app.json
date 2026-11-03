@@ -34,7 +34,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vivid Milks uses your photos to upload the payment QR code."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

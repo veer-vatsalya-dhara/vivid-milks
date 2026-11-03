@@ -11,6 +11,8 @@ import { Icon, type IconName } from './icon';
 export interface TabSpec {
   name: string;
   title: string;
+  /** Shorter label under the tab icon, when the title doesn't fit. */
+  label?: string;
   icon: IconName;
   /** Hide the navigation header (for screens that draw their own). */
   headerShown?: boolean;
@@ -57,6 +59,7 @@ export function ModeTabs({ tabs, headerExtra }: { tabs: TabSpec[]; headerExtra?:
           name={tab.name}
           options={{
             title: tab.title,
+            tabBarLabel: tab.label ?? tab.title,
             headerShown: tab.headerShown ?? true,
             tabBarIcon: ({ color }) => <Icon name={tab.icon} color={color} />,
           }}

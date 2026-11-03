@@ -18,6 +18,15 @@ export type NotDeliveredReason = (typeof NOT_DELIVERED_REASONS)[number];
 export const WALLET_TXN_TYPES = ['topup', 'delivery', 'adjustment'] as const;
 export type WalletTxnType = (typeof WALLET_TXN_TYPES)[number];
 
+export const PAYMENT_METHODS = ['upi', 'cash'] as const;
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
+
+export const PAYMENT_REQUEST_STATUSES = ['pending', 'approved', 'rejected'] as const;
+export type PaymentRequestStatus = (typeof PAYMENT_REQUEST_STATUSES)[number];
+
+/** Largest uploaded payment QR image, as a base64 data URL. */
+export const MAX_QR_IMAGE_CHARS = 1_500_000;
+
 /** Upper bound on units of one product per day, to catch typos. */
 export const MAX_DAILY_QTY = 20;
 
@@ -34,10 +43,38 @@ export interface User {
 }
 
 export interface Address {
+  buildingId: number | null;
+  buildingName: string | null;
+  block: string;
+  /** 0 is the ground floor. */
+  floor: number | null;
+  /** House / flat number. */
   line1: string;
+  /** Older free-text building name, from before buildings were a list. */
   line2: string;
   area: string;
   landmark: string;
+}
+
+/** A building or society customers pick from, with its blocks (towers) if it has any. */
+export interface Building {
+  id: number;
+  name: string;
+  blocks: string[];
+  customerCount: number;
+}
+
+/** "Flat 502, B Block, Floor 5, Vaswani Brentwood, Near park gate" */
+export function formatAddress(address: Address): string {
+  const parts = [
+    address.line1 && (/^\d+$/.test(address.line1) ? `Flat ${address.line1}` : address.line1),
+    address.block && `${address.block} Block`,
+    address.floor !== null && (address.floor === 0 ? 'Ground floor' : `Floor ${address.floor}`),
+    address.buildingName ?? address.line2,
+    address.area,
+    address.landmark,
+  ];
+  return parts.filter(Boolean).join(', ');
 }
 
 export interface Me extends User {
@@ -119,6 +156,34 @@ export interface AppSettings {
   deliveryTime: string;
 }
 
+export interface PaymentQr {
+  /** Data URL of the uploaded QR image, or null if none has been uploaded. */
+  image: string | null;
+}
+
+export interface PaymentRequest {
+  id: number;
+  customerId: number;
+  customerName: string;
+  customerPhone: string | null;
+  amountPaise: number;
+  method: PaymentMethod;
+  /** UPI transaction ID or a note from the customer. */
+  reference: string;
+  status: PaymentRequestStatus;
+  createdAt: string;
+  decidedAt: string | null;
+}
+
+/** One past or confirmed delivery, for the customer's order history. */
+export interface OrderHistoryEntry {
+  date: IsoDate;
+  status: DeliveryStatus;
+  reason: NotDeliveredReason | null;
+  items: (LineItem & { unitPricePaise: number })[];
+  totalPaise: number;
+}
+
 export interface CustomerHome {
   me: Me;
   settings: AppSettings;
@@ -174,10 +239,21 @@ export interface CustomerBalanceAlert {
 }
 
 export interface AdminDashboard {
-  tomorrow: { date: IsoDate; locked: boolean; totals: LineItem[] };
+  tomorrow: {
+    date: IsoDate;
+    locked: boolean;
+    totals: LineItem[];
+    /** Customers getting a delivery. */
+    customerCount: number;
+    /** Value of the deliveries. */
+    totalPaise: number;
+    /** Customers left out because their wallet doesn't cover the order. */
+    skippedLowBalance: number;
+  };
   today: { date: IsoDate; routes: RouteProgress[]; skippedLowBalance: number };
   lowBalanceCustomers: CustomerBalanceAlert[];
   unroutedCustomers: { id: number; name: string }[];
+  pendingPayments: PaymentRequest[];
 }
 
 export interface CustomerSummary {
@@ -186,6 +262,7 @@ export interface CustomerSummary {
   /** Admins appear too, since they can order for themselves. */
   role: Role;
   phone: string | null;
+  /** Building name (or the older area text). */
   area: string | null;
   routeName: string | null;
   balancePaise: number;
@@ -240,9 +317,12 @@ const phone = z
   .regex(/^\+?\d{10,13}$/, 'Enter a valid mobile number');
 
 export const addressInput = z.object({
-  line1: trimmed(200).min(1, 'Required'),
-  line2: trimmed(200).default(''),
-  area: trimmed(100).min(1, 'Required'),
+  buildingId: z.number({ error: 'Choose your building or society' }).int(),
+  /** Must be one of the building's blocks when it has any. */
+  block: trimmed(20).default(''),
+  floor: z.number({ error: 'Enter your floor (0 for ground)' }).int().min(0, 'Floor can’t be negative').max(200),
+  line1: trimmed(50).min(1, 'Required'),
+  area: trimmed(100).default(''),
   landmark: trimmed(200).default(''),
 });
 
@@ -316,6 +396,38 @@ export const assignRouteInput = z.object({
   routePosition: z.number().int().min(1).nullable(),
 });
 export type AssignRouteInput = z.infer<typeof assignRouteInput>;
+
+export const buildingInput = z.object({
+  name: trimmed(100).min(1, 'Required'),
+  blocks: z
+    .array(trimmed(20).min(1))
+    .max(50)
+    .default([])
+    .refine((b) => new Set(b.map((x) => x.toLowerCase())).size === b.length, 'Each block can be listed only once'),
+});
+export type BuildingInput = z.input<typeof buildingInput>;
+
+/** "A, B, C" or "A B C" -> ["A", "B", "C"] */
+export function parseBlocks(text: string): string[] {
+  return text
+    .split(/[,\s]+/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+}
+
+export const paymentRequestInput = z.object({
+  amountPaise: z.number().int().min(100, 'Enter at least ₹1').max(10_000_000, 'That amount looks too large'),
+  method: z.enum(PAYMENT_METHODS),
+  reference: trimmed(100).default(''),
+});
+export type PaymentRequestInput = z.input<typeof paymentRequestInput>;
+
+export const paymentQrInput = z.object({
+  image: z
+    .string()
+    .max(MAX_QR_IMAGE_CHARS, 'Image is too large. Use a smaller picture or a screenshot of the QR.')
+    .regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/, 'Upload a PNG, JPG or WebP image'),
+});
 
 export const productInput = z.object({
   name: trimmed(100).min(1, 'Required'),

@@ -1,11 +1,12 @@
+import { firstEditableDate } from '@vivid-milks/shared';
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 
 import { ProductRow } from '@/components/product-row';
 import { Button, Card, QueryView, Row, Screen, Stepper, Text } from '@/components/ui';
 import { api } from '@/lib/api';
-import { formatRupees } from '@/lib/format';
-import { useApiMutation, useProducts, useSubscriptions } from '@/lib/queries';
+import { formatDay, formatRelativeDay, formatRupees } from '@/lib/format';
+import { useApiMutation, useProducts, useSettings, useSubscriptions } from '@/lib/queries';
 import { closeScreen } from '@/lib/navigation';
 
 export default function SubscribeScreen() {
@@ -38,6 +39,8 @@ function SubscribeForm({
   current: number | null;
 }) {
   const [qty, setQty] = useState(current ?? 1);
+  const settings = useSettings();
+  const startsOn = settings.data && firstEditableDate(settings.data.orderCutoffTime);
   const close = { onSuccess: () => closeScreen() };
   const save = useApiMutation(
     () => api(`/me/subscriptions/${productId}`, { method: 'PUT', body: { defaultQty: qty } }),
@@ -59,7 +62,7 @@ function SubscribeForm({
         </Row>
         <Text type="small" themeColor="textSecondary">
           {formatRupees(product.pricePaise * qty)} a day, about {formatRupees(product.pricePaise * qty * 30)} a month.
-          Starts with the next day you can still change.
+          {startsOn ? (formatRelativeDay(startsOn) === 'Tomorrow' ? 'Starts tomorrow.' : `Starts on ${formatDay(startsOn)}.`) : ''}
         </Text>
       </Card>
       <Button

@@ -23,6 +23,12 @@ const ICONS = {
   location: { ios: 'mappin.and.ellipse', android: 'location_on', web: 'location_on' },
   clock: { ios: 'clock', android: 'schedule', web: 'schedule' },
   moon: { ios: 'moon.stars', android: 'bedtime', web: 'bedtime' },
+  history: { ios: 'clock.arrow.circlepath', android: 'history', web: 'history' },
+  download: { ios: 'arrow.down.doc', android: 'download', web: 'download' },
+  building: { ios: 'building.2', android: 'apartment', web: 'apartment' },
+  rupee: { ios: 'indianrupeesign', android: 'currency_rupee', web: 'currency_rupee' },
+  qr: { ios: 'qrcode', android: 'qr_code_2', web: 'qr_code_2' },
+  warning: { ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' },
 } as const satisfies Record<string, SymbolViewProps['name']>;
 
 export type IconName = keyof typeof ICONS;

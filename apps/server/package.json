@@ -9,13 +9,15 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "db:migrate": "tsx src/scripts/migrate.ts"
+    "db:migrate": "tsx src/scripts/migrate.ts",
+    "db:remove-sample-data": "tsx src/scripts/remove-sample-data.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.14",
     "@fastify/cors": "^11.3.1",
     "@vivid-milks/shared": "*",
     "drizzle-orm": "^0.45.4",
+    "exceljs": "^4.4.0",
     "fastify": "^5.12.7",
     "jose": "^6.2.14",
     "pg": "^8.23.1",

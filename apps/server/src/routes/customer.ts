@@ -3,6 +3,7 @@ import {
   dayQtyInput,
   isIsoDate,
   pauseInput,
+  paymentRequestInput,
   subscriptionInput,
   todayInIst,
 } from '@vivid-milks/shared';
@@ -17,12 +18,14 @@ import {
   endPause,
   getActivePause,
   getCustomerHome,
+  getOrderHistory,
   getSchedule,
   getSubscriptions,
   removeSubscription,
   setDayQty,
   setSubscription,
 } from '../services/customer';
+import { createPaymentRequest, listPaymentRequests } from '../services/payments';
 import { getWallet } from '../services/wallet';
 
 const productParams = z.object({ productId: z.coerce.number().int() });
@@ -45,11 +48,11 @@ export async function customerRoutes(app: FastifyInstance, { db, now }: AppConte
   app.get('/subscriptions', async (req) => getSubscriptions(db, me(req)));
   app.put('/subscriptions/:productId', async (req) => {
     const { productId } = parse(productParams, req.params);
-    return setSubscription(db, me(req), productId, parse(subscriptionInput, req.body).defaultQty);
+    return setSubscription(db, me(req), productId, parse(subscriptionInput, req.body).defaultQty, now());
   });
   app.delete('/subscriptions/:productId', async (req) => {
     const { productId } = parse(productParams, req.params);
-    return removeSubscription(db, me(req), productId);
+    return removeSubscription(db, me(req), productId, now());
   });
 
   app.get('/schedule', async (req) => {
@@ -67,4 +70,10 @@ export async function customerRoutes(app: FastifyInstance, { db, now }: AppConte
   app.delete('/pause', async (req) => ({ pause: await endPause(db, me(req), now()) }));
 
   app.get('/wallet', async (req) => getWallet(db, me(req), now()));
+  app.get('/orders', async (req) => getOrderHistory(db, me(req)));
+
+  app.get('/payment-requests', async (req) => listPaymentRequests(db, { customerId: me(req) }));
+  app.post('/payment-requests', async (req) =>
+    createPaymentRequest(db, me(req), parse(paymentRequestInput, req.body)),
+  );
 }

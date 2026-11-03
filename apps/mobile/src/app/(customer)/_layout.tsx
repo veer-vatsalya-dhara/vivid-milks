@@ -16,8 +16,9 @@ export default function CustomerLayout() {
       headerExtra={() => <HeaderWallet />}
       tabs={[
         { name: 'home', title: 'Home', icon: 'shop', headerShown: false },
-        { name: 'basket', title: 'My Basket', icon: 'basket' },
-        { name: 'subscriptions', title: 'Subscriptions', icon: 'calendar' },
+        { name: 'basket', title: 'My Basket', label: 'Basket', icon: 'basket' },
+        { name: 'subscriptions', title: 'Subscriptions', label: 'Daily', icon: 'calendar' },
+        { name: 'orders', title: 'Orders', icon: 'history' },
         { name: 'wallet', title: 'Wallet', icon: 'wallet' },
       ]}
     />
